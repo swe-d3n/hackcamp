@@ -398,25 +398,32 @@ class ClashEmoteApp:
                 if not self.emote_mode:
 
                     # Step 1: If 2 hands appear, start a 0.5s countdown
-                    if num_hands >= 2:
-                        # If this is the FIRST frame with 2 hands, store timestamp
-                        if self.last_two_hand_check_time == 0:
-                            self.last_two_hand_check_time = current_time
-                        
-                        # Step 2: After 0.5 seconds have passed, confirm 2 hands again
-                        elif current_time - self.last_two_hand_check_time >= self.two_hand_check_interval:
-                            if num_hands >= 2:
-                                self.emote_mode = True
-                                pyautogui.press('e')
-                                print("Entering EMOTE MODE - pressed 'E'")
-                                self.controller.cleanup()
-                            
-                            # Reset timer either way
+                    # CHECK FOR EMOTE MODE ONLY WHEN IN MOUSE MODE
+                    if not self.emote_mode:
+                        # Only begin checking if there are 2 hands
+                        if num_hands >= 2:
+
+                            # If this is the first frame noticing 2 hands, start the timer
+                            if self.last_two_hand_check_time == 0:
+                                self.last_two_hand_check_time = current_time
+
+                            # If 0.5 seconds have passed, and still 2 hands → switch to emote mode
+                            elif current_time - self.last_two_hand_check_time >= self.two_hand_check_interval:
+                                if num_hands >= 2:
+                                    self.emote_mode = True
+                                    pyautogui.press('e')
+                                    print("Entering EMOTE MODE - pressed 'E'")
+                                    self.controller.cleanup()
+
+                                # reset the timer either way
+                                self.last_two_hand_check_time = 0
+
+                        else:
+                            # if fewer than 2 hands, reset the timer
                             self.last_two_hand_check_time = 0
 
-                    else:
-                        # If fewer than 2 hands, reset timer
-                        self.last_two_hand_check_time = 0
+
+                    
 
                 
                 if self.emote_mode:
