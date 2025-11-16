@@ -9,54 +9,32 @@ import time
 
 
 class EmoteClicker:
-    def __init__(self, emote_button_key='e', emote_key_map=None, cooldown=1.5):
+    def __init__(self, emote_button_key='e', emote_button_pos=None, emote_positions=None, cooldown=1.5):
         """
         Initialize BlueStacks emote controller
-        
+
         Args:
             emote_button_key: Key to open emote menu (default 'e')
-            emote_key_map: Dict mapping emote_name -> key to press
-                          If None, uses default mapping
+            emote_button_pos: (x, y) coordinate to click emote button, or None to use keyboard
+            emote_positions: Dict mapping emote_name -> (x, y) click position
             cooldown: Minimum seconds between emotes (default 1.5)
         """
         self.emote_button_key = emote_button_key
-        
-        # Default key mapping for emotes
-        # Customize these based on your BlueStacks key mapping configuration
-        self.emote_key_map = emote_key_map or {
-            # Row 1
-            "laughing": "1",
-            "crying": "2",
-            "angry": "3",
-            "king_thumbs_up": "4",
-            
-            # Row 2
-            "thumbs_up": "q",
-            "chicken": "w",
-            "goblin_kiss": "r",
-            "princess_yawn": "t",
-            
-            # Row 3
-            "wow": "a",
-            "thinking": "s",
-            "screaming": "d",
-            "king_laugh": "f",
-            
-            # Row 4
-            "goblin_laugh": "z",
-            "princess_cry": "x",
-            "goblin_angry": "c",
-        }
-        
+        self.emote_button_pos = emote_button_pos
+
+        # Emote positions for mouse clicking
+        # If None, will be loaded from config in main.py
+        self.emote_positions = emote_positions or {}
+
         self.cooldown = cooldown
         self.last_emote_time = 0
-        
+
         # Safety features
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.01
-        
-        # Delay between key presses
-        self.key_delay = 0.05  # 50ms between keystrokes
+
+        # Delay between actions
+        self.click_delay = 0.15  # Delay after opening emote menu before clicking emote
     
     def can_trigger_emote(self):
         """Check if enough time has passed since last emote"""
@@ -64,11 +42,11 @@ class EmoteClicker:
     
     def trigger_emote(self, emote_name):
         """
-        Trigger emote by pressing key sequence
-        
+        Trigger emote by pressing 'e' then clicking coordinates
+
         Args:
-            emote_name: Name of emote to trigger (must match key in emote_key_map)
-            
+            emote_name: Name of emote to trigger (must match key in emote_positions)
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -77,31 +55,33 @@ class EmoteClicker:
             time_left = self.cooldown - (time.time() - self.last_emote_time)
             print(f"Cooldown: {time_left:.1f}s remaining...")
             return False
-        
-        # Check if emote exists in mapping
-        if emote_name not in self.emote_key_map:
-            print(f"Warning: Emote '{emote_name}' not found in key mapping")
+
+        # Check if emote exists in position mapping
+        if emote_name not in self.emote_positions:
+            print(f"Warning: Emote '{emote_name}' not found in position mapping")
             return False
-        
+
         try:
-            emote_key = self.emote_key_map[emote_name]
-            
+            emote_pos = self.emote_positions[emote_name]
+
             print(f"\n>>> TRIGGERING EMOTE: {emote_name} <<<")
-            
-            # Step 1: Press emote button to open menu
+
+            # Step 1: Press 'e' to open emote menu
             print(f"  1. Opening emote menu (pressing '{self.emote_button_key}')...")
             pyautogui.press(self.emote_button_key)
-            time.sleep(self.key_delay)
-            
-            # Step 2: Press specific emote key
-            print(f"  2. Selecting emote (pressing '{emote_key}')...")
-            pyautogui.press(emote_key)
-            
+
+            # Wait for menu to open
+            time.sleep(self.click_delay)
+
+            # Step 2: Click on specific emote position
+            print(f"  2. Selecting emote (clicking at {emote_pos})...")
+            pyautogui.click(emote_pos[0], emote_pos[1])
+
             # Update last emote time
             self.last_emote_time = time.time()
             print("  ✓ Emote triggered successfully!")
             return True
-            
+
         except Exception as e:
             print(f"Error triggering emote: {e}")
             return False
@@ -120,32 +100,35 @@ class EmoteClicker:
         """Change the cooldown time"""
         self.cooldown = seconds
     
-    def set_key_mapping(self, emote_name, key):
+    def set_emote_position(self, emote_name, position):
         """
-        Add or update key mapping for an emote
-        
+        Add or update position mapping for an emote
+
         Args:
             emote_name: Name of emote
-            key: Keyboard key to trigger it
+            position: (x, y) tuple for click position
         """
-        self.emote_key_map[emote_name] = key
-        print(f"Updated key mapping: {emote_name} -> '{key}'")
+        self.emote_positions[emote_name] = position
+        print(f"Updated emote position: {emote_name} -> {position}")
     
     def get_mapped_emotes(self):
         """Get list of all mapped emote names"""
-        return list(self.emote_key_map.keys())
+        return list(self.emote_positions.keys())
     
-    def print_key_mapping(self):
-        """Print current key mapping configuration"""
+    def print_emote_mapping(self):
+        """Print current emote position mapping"""
         print("\n" + "="*60)
-        print("BLUESTACKS EMOTE KEY MAPPING")
+        print("BLUESTACKS EMOTE POSITION MAPPING")
         print("="*60)
-        print(f"Emote Menu Key: '{self.emote_button_key}'")
+        if self.emote_button_pos:
+            print(f"Emote Button Position: {self.emote_button_pos}")
+        else:
+            print(f"Emote Button Key: '{self.emote_button_key}'")
         print(f"Cooldown: {self.cooldown}s")
-        print("\nEmote Key Bindings:")
+        print("\nEmote Click Positions:")
         print("-" * 60)
-        for emote_name, key in sorted(self.emote_key_map.items()):
-            print(f"  {emote_name:20} -> '{key}'")
+        for emote_name, pos in sorted(self.emote_positions.items()):
+            print(f"  {emote_name:20} -> {pos}")
         print("="*60 + "\n")
 
 

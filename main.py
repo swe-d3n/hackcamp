@@ -48,9 +48,14 @@ class ClashRoyaleEmoteApp:
         # Initialize BlueStacks controller
         print("Initializing BlueStacks controller...")
         self.emote_controller = EmoteClicker(
-            emote_button_key='e',  # Customize this
+            emote_button_key='e',
+            emote_button_pos=getattr(Config, 'EMOTE_BUTTON_POS', None),
+            emote_positions=getattr(Config, 'EMOTE_POSITIONS', {}),
             cooldown=1.5
         )
+
+        # Print emote configuration
+        self.emote_controller.print_emote_mapping()
         
         # FPS tracking
         self.fps = 0
