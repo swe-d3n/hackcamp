@@ -6,6 +6,7 @@ Recognizes hand gestures (open/closed)
 import numpy as np
 from collections import deque
 import pyautogui
+import time
 
 class GestureRecognizer:
     def __init__(self, smoothing_frames=5, closed_threshold=0.30):
@@ -27,7 +28,22 @@ class GestureRecognizer:
 
         # Previous finger count for number key presses
         self.previous_finger_count = 0
-        
+
+        # Last stable finger count (when hand was fully open)
+        self.stable_finger_count = 0
+
+        # Track if we're in a closing/opening transition
+        self.in_transition = False
+
+        # Current finger count for display
+        self.current_finger_count = 0
+
+        # Time-based tracking for stable finger counts
+        self.last_finger_count_change_time = time.time()
+        self.time_at_current_count = 0.0
+        self.stable_threshold = 0.5  # Time needed to be considered stable (seconds)
+        self.transition_window = 0.3  # Time window to detect quick transitions (seconds)
+
     def calculate_distance(self, point1, point2):
         """
         Calculate Euclidean distance between two points
@@ -62,7 +78,7 @@ class GestureRecognizer:
         tip = landmarks[finger_tip_idx]
         pip = landmarks[finger_pip_idx]
         
-        return tip['x'] > pip['x'] -0.05
+        return tip['x'] > pip['x'] -0.01
     
     
     
@@ -102,15 +118,64 @@ class GestureRecognizer:
         # Hand is open if at least 3 fingers are extended
 
         total_fingers_extended = sum(fingers_extended)
+        current_time = time.time()
 
-        if 0 < total_fingers_extended < 5:
-            if total_fingers_extended != self.previous_finger_count:
-                pyautogui.press(str(total_fingers_extended))
+        # Determine if hand is open (3+ fingers)
+        open_gesture = total_fingers_extended >= 1
+
+        # Track how long we've been at the current finger count
+        if total_fingers_extended != self.previous_finger_count:
+            # Finger count changed
+            self.last_finger_count_change_time = current_time
+            self.time_at_current_count = 0.0
+        else:
+            # Same count, accumulate time
+            self.time_at_current_count = current_time - self.last_finger_count_change_time
+
+        # Smart finger count handling with time-based stability:
+        # - A finger count becomes "stable" after being held for stable_threshold seconds
+        # - If we see a brief change (< transition_window) followed by 0 fingers, revert to last stable count
+
+        if total_fingers_extended == 0:
+            # Hand is fully closed
+            # Check if we recently changed from the stable count (within transition window)
+            time_since_change = current_time - self.last_finger_count_change_time
+
+            if (self.previous_finger_count != 0 and
+                self.previous_finger_count != self.stable_finger_count and
+                time_since_change < self.transition_window):
+                # We briefly showed a different finger count, then closed quickly
+                # This is likely an unintentional change during closing
+                # Re-press the stable count
+                if self.stable_finger_count > 0:
+                    pyautogui.press(str(self.stable_finger_count))
+                    print(f">>> Quick close detected, re-pressed stable key: {self.stable_finger_count}")
+
+            self.in_transition = True
+
+        elif 1 <= total_fingers_extended <= 4:
+            # Showing 1-4 fingers
+
+            # Check if this count has been stable long enough
+            if self.time_at_current_count >= self.stable_threshold:
+                # This is a stable finger count
+                if total_fingers_extended != self.stable_finger_count:
+                    # New stable count detected - press the key
+                    self.stable_finger_count = total_fingers_extended
+                    pyautogui.press(str(total_fingers_extended))
+                    print(f">>> New stable count: {total_fingers_extended}")
+                    self.in_transition = False
+            else:
+                # Not stable yet - still accumulating time
+                # If we're in transition and back to stable count, exit transition
+                if self.in_transition and total_fingers_extended == self.stable_finger_count:
+                    self.in_transition = False
+                    print(f">>> Returned to stable count: {self.stable_finger_count}")
 
         self.previous_finger_count = total_fingers_extended
 
-        
-        open_gesture = total_fingers_extended >= 3
+        # Update current finger count for display
+        self.current_finger_count = total_fingers_extended
 
 
         # For Debugging
