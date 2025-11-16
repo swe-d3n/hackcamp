@@ -1,6 +1,6 @@
 """
-Main Application
-Hand Tracking Mouse Control System
+Clash Royale Emote Controller - Main Integration
+Combines face detection, hand gestures, and BlueStacks keyboard control
 """
 
 import cv2
@@ -8,19 +8,20 @@ import time
 import numpy as np
 from camera_handler import CameraHandler
 from hand_detector import HandDetector
-from gesture_recognizer import GestureRecognizer
-from mouse_controller import MouseController
+from face_detector import FaceDetector
+from emote_matcher import EmoteMatcher
+from emote_clicker import EmoteClicker
 from config import ACTIVE_CONFIG as Config
 
 
-class HandMouseApp:
+class ClashRoyaleEmoteApp:
     def __init__(self):
-        """Initialize the hand mouse control application"""
-        print("="*50)
-        print("Hand Tracking Mouse Control System")
-        print("="*50)
+        """Initialize the Clash Royale emote control application"""
+        print("="*60)
+        print("CLASH ROYALE EMOTE CONTROLLER")
+        print("="*60)
         
-        # Initialize components
+        # Initialize camera
         print("Initializing camera...")
         self.camera = CameraHandler(
             camera_index=Config.CAMERA_INDEX,
@@ -28,28 +29,27 @@ class HandMouseApp:
             height=Config.CAMERA_HEIGHT
         )
         
+        # Initialize detectors
         print("Initializing hand detector...")
-        self.detector = HandDetector(
+        self.hand_detector = HandDetector(
             max_num_hands=Config.MAX_NUM_HANDS,
             min_detection_confidence=Config.MIN_DETECTION_CONFIDENCE,
             min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE,
             model_complexity=getattr(Config, 'MODEL_COMPLEXITY', 0)
         )
         
-        print("Initializing gesture recognizer...")
-        self.recognizer = GestureRecognizer(
-            smoothing_frames=Config.GESTURE_SMOOTHING_FRAMES,
-            closed_threshold=Config.CLOSED_HAND_THRESHOLD
-        )
+        print("Initializing face detector...")
+        self.face_detector = FaceDetector()
         
-        print("Initializing mouse controller...")
-        self.controller = MouseController(
-            smoothing_factor=Config.CURSOR_SMOOTHING_FACTOR,
-            click_cooldown=Config.CLICK_COOLDOWN,
-            screen_margin=Config.SCREEN_MARGIN,
-            movement_threshold=Config.MOVEMENT_THRESHOLD,
-            tracking_zone_min=Config.TRACKING_ZONE_MIN,
-            tracking_zone_max=Config.TRACKING_ZONE_MAX
+        # Initialize emote matcher
+        print("Initializing emote matcher...")
+        self.emote_matcher = EmoteMatcher()
+        
+        # Initialize BlueStacks controller
+        print("Initializing BlueStacks controller...")
+        self.emote_controller = EmoteClicker(
+            emote_button_key='e',  # Customize this
+            cooldown=1.5
         )
         
         # FPS tracking
@@ -57,243 +57,214 @@ class HandMouseApp:
         self.frame_count = 0
         self.fps_start_time = time.time()
         
-        # Frame skipping for performance
-        self.process_every_n_frames = getattr(Config, 'PROCESS_EVERY_N_FRAMES', 1)
-        self.frame_counter = 0
-        
-        # Cache last detection results for frame skipping
-        self.last_hands_data = []
-        self.last_gesture = "open"
-        self.last_hand_x = 0.5
-        self.last_hand_y = 0.5
+        # Current detection state
+        self.current_expression = "neutral"
+        self.current_gesture = "none"
+        self.last_matched_emote = None
         
         # Running state
         self.running = False
         
-        print(f"Frame skipping: Process every {self.process_every_n_frames} frame(s)")
         print("Initialization complete!")
-        print("="*50)
-        
+        print("="*60)
+    
     def calculate_fps(self):
         """Calculate and update FPS"""
         self.frame_count += 1
-        
-        # Update FPS every second
         elapsed = time.time() - self.fps_start_time
         if elapsed > 1.0:
             self.fps = self.frame_count / elapsed
             self.frame_count = 0
             self.fps_start_time = time.time()
     
-    def draw_ui(self, frame, gesture, hand_detected):
+    def recognize_hand_gesture(self, landmarks):
         """
-        Draw UI overlay on frame
-
-        Args:
-            frame: Camera frame
-            gesture: Current gesture ("open", "closed", or None)
-            hand_detected: Whether a hand was detected
+        Recognize hand gesture from landmarks
+        Returns: gesture name (e.g., "thumbs_up", "peace", "fist", etc.)
         """
+        if landmarks is None or len(landmarks) < 21:
+            return "none"
+        
+        # Simple gesture recognition based on finger positions
+        # You can expand this with more sophisticated gesture detection
+        
+        # Check for thumbs up
+        thumb_tip = landmarks[4]
+        thumb_base = landmarks[2]
+        index_tip = landmarks[8]
+        
+        # Thumbs up: thumb extended up, other fingers closed
+        if thumb_tip['y'] < thumb_base['y'] - 0.1:
+            # Check if other fingers are closed
+            fingers_closed = all(
+                landmarks[tip]['y'] > landmarks[tip-2]['y']
+                for tip in [8, 12, 16, 20]
+            )
+            if fingers_closed:
+                return "thumbs_up"
+        
+        # Peace sign: index and middle extended, others closed
+        index_extended = landmarks[8]['y'] < landmarks[6]['y']
+        middle_extended = landmarks[12]['y'] < landmarks[10]['y']
+        ring_closed = landmarks[16]['y'] > landmarks[14]['y']
+        pinky_closed = landmarks[20]['y'] > landmarks[18]['y']
+        
+        if index_extended and middle_extended and ring_closed and pinky_closed:
+            return "peace"
+        
+        # Open palm: all fingers extended
+        all_extended = all(
+            landmarks[tip]['y'] < landmarks[tip-2]['y']
+            for tip in [8, 12, 16, 20]
+        )
+        if all_extended:
+            return "open_palm"
+        
+        # Fist: all fingers closed
+        all_closed = all(
+            landmarks[tip]['y'] > landmarks[tip-2]['y']
+            for tip in [8, 12, 16, 20]
+        )
+        if all_closed:
+            return "fist"
+        
+        # Pointing: only index extended
+        if index_extended and not middle_extended and ring_closed and pinky_closed:
+            return "pointing"
+        
+        return "none"
+    
+    def draw_ui(self, frame):
+        """Draw UI overlay on frame"""
         h, w, _ = frame.shape
-
-        # Draw tracking zone boundaries
-        if Config.SHOW_TRACKING_ZONE:
-            zone_x1 = int(w * Config.TRACKING_ZONE_MIN)
-            zone_y1 = int(h * Config.TRACKING_ZONE_MIN)
-            zone_x2 = int(w * Config.TRACKING_ZONE_MAX)
-            zone_y2 = int(h * Config.TRACKING_ZONE_MAX)
-
-            # Draw tracking zone rectangle
-            cv2.rectangle(frame, (zone_x1, zone_y1), (zone_x2, zone_y2),
-                         (0, 255, 255), 2)  # Yellow border
-
-            # Add corner markers for better visibility
-            marker_size = 20
-            color = (0, 255, 255)
-            thickness = 3
-            # Top-left corner
-            cv2.line(frame, (zone_x1, zone_y1), (zone_x1 + marker_size, zone_y1), color, thickness)
-            cv2.line(frame, (zone_x1, zone_y1), (zone_x1, zone_y1 + marker_size), color, thickness)
-            # Top-right corner
-            cv2.line(frame, (zone_x2, zone_y1), (zone_x2 - marker_size, zone_y1), color, thickness)
-            cv2.line(frame, (zone_x2, zone_y1), (zone_x2, zone_y1 + marker_size), color, thickness)
-            # Bottom-left corner
-            cv2.line(frame, (zone_x1, zone_y2), (zone_x1 + marker_size, zone_y2), color, thickness)
-            cv2.line(frame, (zone_x1, zone_y2), (zone_x1, zone_y2 - marker_size), color, thickness)
-            # Bottom-right corner
-            cv2.line(frame, (zone_x2, zone_y2), (zone_x2 - marker_size, zone_y2), color, thickness)
-            cv2.line(frame, (zone_x2, zone_y2), (zone_x2, zone_y2 - marker_size), color, thickness)
-
-        # Semi-transparent overlay for better text visibility
+        
+        # Semi-transparent overlay
         overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (w, 150), (0, 0, 0), -1)
+        cv2.rectangle(overlay, (0, 0), (w, 200), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
-
+        
         y_offset = 30
-
+        
         # FPS
-        if Config.SHOW_FPS:
-            fps_color = Config.COLOR_FPS_GOOD
-            if self.fps < 15:
-                fps_color = Config.COLOR_FPS_BAD
-            elif self.fps < 25:
-                fps_color = Config.COLOR_FPS_MEDIUM
-
-            cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
-            y_offset += 35
-
-        # Hand detection status
-        if hand_detected:
-            cv2.putText(frame, "Hand: DETECTED", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        else:
-            cv2.putText(frame, "Hand: NOT DETECTED", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, f"FPS: {self.fps:.1f}", (10, y_offset),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         y_offset += 35
-
-        # Get cursor info for drag status
-        cursor_info = self.controller.get_cursor_info()
-
-        # Gesture status
-        if Config.SHOW_GESTURE_STATUS and gesture:
-            if cursor_info['is_dragging']:
-                gesture_text = "DRAGGING"
-                color = (255, 0, 255)  # Magenta for dragging
-            elif gesture == "open":
-                gesture_text = "HOVER"
-                color = Config.COLOR_OPEN_HAND
-            else:
-                gesture_text = "CLOSED"
-                color = Config.COLOR_CLOSED_HAND
-
-            cv2.putText(frame, f"Gesture: {gesture_text}", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+        # Expression
+        cv2.putText(frame, f"Expression: {self.current_expression}", (10, y_offset),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        y_offset += 35
+        
+        # Gesture
+        cv2.putText(frame, f"Gesture: {self.current_gesture}", (10, y_offset),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        y_offset += 35
+        
+        # Last matched emote
+        if self.last_matched_emote:
+            cv2.putText(frame, f"Emote: {self.last_matched_emote}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             y_offset += 35
-
-        # Cursor position
-        if Config.SHOW_CURSOR_POSITION:
-            cv2.putText(frame,
-                       f"Cursor: ({cursor_info['x']}, {cursor_info['y']})",
-                       (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, Config.COLOR_TEXT, 2)
-
-        # Instructions (bottom of screen)
+        
+        # Cooldown status
+        if not self.emote_controller.is_ready():
+            remaining = self.emote_controller.get_cooldown_remaining()
+            cv2.putText(frame, f"Cooldown: {remaining:.1f}s", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        else:
+            cv2.putText(frame, "Ready to emote!", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Instructions
         instructions = [
-            "Controls: Open Hand = Move | Close & Hold = Drag | Quick Close = Click",
-            "Press 'Q' to quit | Move mouse to corner for emergency stop"
+            "Make facial expressions + hand gestures",
+            "Emotes trigger automatically in BlueStacks",
+            "Press 'Q' to quit"
         ]
-
-        y_pos = h - 60
+        
+        y_pos = h - 90
         for instruction in instructions:
             cv2.putText(frame, instruction, (10, y_pos),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, Config.COLOR_TEXT, 1)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             y_pos += 25
     
     def process_frame(self):
-        """
-        Process a single frame
-        
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        # Read frame
+        """Process a single frame"""
         ret, frame = self.camera.read_frame()
         if not ret:
-            print("Failed to read frame")
             return False
         
-        # Increment frame counter
-        self.frame_counter += 1
+        # Detect face and expression
+        frame, face_data = self.face_detector.detect_face(frame, draw=True)
+        if face_data:
+            self.current_expression = face_data['expression']
+        else:
+            self.current_expression = "neutral"
         
-        # Decide whether to process hand detection this frame
-        should_process = (self.frame_counter % self.process_every_n_frames == 0)
+        # Detect hand and gesture
+        frame, hands_data = self.hand_detector.find_hands(frame, draw=True)
+        if hands_data and len(hands_data) > 0:
+            landmarks = hands_data[0]['landmarks']
+            self.current_gesture = self.recognize_hand_gesture(landmarks)
+        else:
+            self.current_gesture = "none"
         
-        gesture = self.last_gesture
-        hand_detected = len(self.last_hands_data) > 0
-        hand_x = self.last_hand_x
-        hand_y = self.last_hand_y
-
-        if should_process:
-            # Detect hands (expensive operation)
-            frame, hands_data = self.detector.find_hands(
-                frame, 
-                draw=Config.DRAW_HAND_LANDMARKS
+        # Try to match emote
+        if self.current_gesture != "none":
+            matched_emote = self.emote_matcher.match_emote(
+                self.current_expression,
+                self.current_gesture
             )
             
-            # Cache results
-            self.last_hands_data = hands_data
-            hand_detected = len(hands_data) > 0
-
-            if hand_detected:
-                # Get first hand
-                landmarks = hands_data[0]['landmarks']
-
-                # Calculate palm center (average of palm base landmarks)
-                palm_landmarks = [0]
-                hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
-                hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
+            if matched_emote:
+                print(f"\n🎯 MATCHED: {matched_emote}")
+                print(f"   Expression: {self.current_expression}")
+                print(f"   Gesture: {self.current_gesture}")
                 
-                # Cache position
-                self.last_hand_x = hand_x
-                self.last_hand_y = hand_y
-
-                # Recognize gesture
-                gesture = self.recognizer.get_smoothed_gesture(landmarks)
-                self.last_gesture = gesture
-        else:
-            # Use cached data but still draw landmarks if we have them
-            if Config.DRAW_HAND_LANDMARKS and hand_detected:
-                # We skip drawing on non-processed frames for performance
-                pass
-
-        # Update mouse control using cached or new data
-        if hand_detected:
-            try:
-                self.controller.update(hand_x, hand_y, gesture)
-            except Exception as e:
-                print(f"Mouse control error: {e}")
-                return False
-
+                # Try to trigger emote in BlueStacks
+                if self.emote_controller.is_ready():
+                    success = self.emote_controller.trigger_emote(matched_emote)
+                    if success:
+                        self.last_matched_emote = matched_emote
+                        # Clear history to prevent re-triggering
+                        self.emote_matcher.clear_history()
+        
         # Calculate FPS
         self.calculate_fps()
-
+        
         # Draw UI
-        if Config.SHOW_CAMERA_FEED:
-            self.draw_ui(frame, gesture, hand_detected)
-            cv2.imshow("Hand Mouse Control", frame)
+        self.draw_ui(frame)
+        
+        # Show frame
+        cv2.imshow("Clash Royale Emote Control", frame)
         
         return True
     
     def run(self):
         """Run the main application loop"""
         try:
-            # Start camera
             self.camera.start()
             self.running = True
             
-            print("\n" + "="*50)
+            print("\n" + "="*60)
             print("APPLICATION RUNNING")
-            print("="*50)
-            print("\nControls:")
-            print("  • Open hand = Move cursor")
-            print("  • Close fist and hold = Drag")
-            print("  • Close and release quickly = Click")
-            print("  • Press 'Q' = Quit")
-            print("  • Move mouse to corner = Emergency stop")
-            print("\nStarting in 3 seconds...")
-            print("="*50 + "\n")
+            print("="*60)
+            print("\nInstructions:")
+            print("  • Make facial expressions (laughing, crying, angry, etc.)")
+            print("  • Show hand gestures (thumbs up, peace sign, fist, etc.)")
+            print("  • Matching emotes will trigger automatically in BlueStacks")
+            print("  • Press 'Q' to quit")
+            print("\nMake sure BlueStacks is running and focused!")
+            print("="*60 + "\n")
             
             # Give user time to prepare
             time.sleep(3)
             
             # Main loop
             while self.running:
-                # Process frame
                 if not self.process_frame():
                     break
                 
-                # Check for quit command
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q') or key == ord('Q'):
                     print("\nQuit command received")
@@ -301,12 +272,10 @@ class HandMouseApp:
         
         except KeyboardInterrupt:
             print("\nInterrupted by user")
-        
         except Exception as e:
             print(f"\nError: {e}")
             import traceback
             traceback.print_exc()
-        
         finally:
             self.cleanup()
     
@@ -315,24 +284,36 @@ class HandMouseApp:
         print("\nCleaning up...")
         self.running = False
         
-        # Clean up mouse controller (release any held buttons)
-        if hasattr(self, 'controller'):
-            self.controller.cleanup()
-        
-        if hasattr(self, 'detector'):
-            self.detector.release()
-        
+        if hasattr(self, 'face_detector'):
+            self.face_detector.release()
+        if hasattr(self, 'hand_detector'):
+            self.hand_detector.release()
         if hasattr(self, 'camera'):
             self.camera.release()
         
         cv2.destroyAllWindows()
-        
         print("Cleanup complete. Goodbye!")
 
 
 def main():
     """Main entry point"""
-    app = HandMouseApp()
+    print("\n" + "="*60)
+    print("CLASH ROYALE EMOTE CONTROLLER")
+    print("="*60)
+    print("\nSetup Checklist:")
+    print("  ✓ BlueStacks is installed and running")
+    print("  ✓ Clash Royale is open in BlueStacks")
+    print("  ✓ BlueStacks key mapping is configured:")
+    print("      - 'E' opens emote menu")
+    print("      - Number/letter keys trigger emotes")
+    print("  ✓ Camera has good lighting")
+    print("  ✓ Plain background behind you")
+    print("\nReady to start?")
+    print("="*60)
+    
+    input("Press ENTER to begin...")
+    
+    app = ClashRoyaleEmoteApp()
     app.run()
 
 

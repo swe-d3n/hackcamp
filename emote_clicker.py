@@ -1,6 +1,7 @@
 """
-Simple Emote Clicker
-Clicks emote button then the specific emote when triggered
+BlueStacks Emote Controller
+Controls Clash Royale emotes in BlueStacks using keyboard shortcuts
+Maps detected emotes to keyboard key sequences
 """
 
 import pyautogui
@@ -8,219 +9,345 @@ import time
 
 
 class EmoteClicker:
-    def __init__(self, emote_button_pos, emote_positions, click_delay=0.1):
+    def __init__(self, emote_button_key='e', emote_key_map=None, cooldown=1.5):
         """
-        Initialize emote clicker
+        Initialize BlueStacks emote controller
         
         Args:
-            emote_button_pos: (x, y) position of main emote button
-            emote_positions: Dict of emote_name -> (x, y) position
-            click_delay: Delay between clicks in seconds (default 0.1 for speed)
+            emote_button_key: Key to open emote menu (default 'e')
+            emote_key_map: Dict mapping emote_name -> key to press
+                          If None, uses default mapping
+            cooldown: Minimum seconds between emotes (default 1.5)
         """
-        self.emote_button_pos = emote_button_pos
-        self.emote_positions = emote_positions
-        self.click_delay = click_delay
+        self.emote_button_key = emote_button_key
         
-        # Cooldown to prevent spam clicking
-        self.last_click_time = 0
-        self.cooldown = 1.5  # 1.5 seconds between emote clicks
+        # Default key mapping for emotes
+        # Customize these based on your BlueStacks key mapping configuration
+        self.emote_key_map = emote_key_map or {
+            # Row 1
+            "laughing": "1",
+            "crying": "2",
+            "angry": "3",
+            "king_thumbs_up": "4",
+            
+            # Row 2
+            "thumbs_up": "q",
+            "chicken": "w",
+            "goblin_kiss": "r",
+            "princess_yawn": "t",
+            
+            # Row 3
+            "wow": "a",
+            "thinking": "s",
+            "screaming": "d",
+            "king_laugh": "f",
+            
+            # Row 4
+            "goblin_laugh": "z",
+            "princess_cry": "x",
+            "goblin_angry": "c",
+        }
+        
+        self.cooldown = cooldown
+        self.last_emote_time = 0
         
         # Safety features
-        pyautogui.FAILSAFE = True  # Move mouse to corner to stop
-        pyautogui.PAUSE = 0.01  # Minimal pause for fast clicking
+        pyautogui.FAILSAFE = True
+        pyautogui.PAUSE = 0.01
+        
+        # Delay between key presses
+        self.key_delay = 0.05  # 50ms between keystrokes
     
-    def can_click(self):
-        """Check if enough time has passed since last click"""
-        return (time.time() - self.last_click_time) >= self.cooldown
+    def can_trigger_emote(self):
+        """Check if enough time has passed since last emote"""
+        return (time.time() - self.last_emote_time) >= self.cooldown
     
-    def click_emote(self, emote_name):
+    def trigger_emote(self, emote_name):
         """
-        Quickly click emote button then the specific emote
+        Trigger emote by pressing key sequence
         
         Args:
-            emote_name: Name of emote to click (must match key in emote_positions)
+            emote_name: Name of emote to trigger (must match key in emote_key_map)
             
         Returns:
             bool: True if successful, False otherwise
         """
         # Check cooldown
-        if not self.can_click():
-            time_left = self.cooldown - (time.time() - self.last_click_time)
+        if not self.can_trigger_emote():
+            time_left = self.cooldown - (time.time() - self.last_emote_time)
             print(f"Cooldown: {time_left:.1f}s remaining...")
             return False
         
-        # Check if emote exists
-        if emote_name not in self.emote_positions:
-            print(f"Error: Emote '{emote_name}' not found in positions")
+        # Check if emote exists in mapping
+        if emote_name not in self.emote_key_map:
+            print(f"Warning: Emote '{emote_name}' not found in key mapping")
             return False
         
         try:
-            print(f"\n>>> CLICKING EMOTE: {emote_name} <<<")
+            emote_key = self.emote_key_map[emote_name]
             
-            # Step 1: Click emote button to open menu
-            print("  1. Opening emote menu...")
-            pyautogui.click(self.emote_button_pos[0], self.emote_button_pos[1])
-            time.sleep(self.click_delay)  # Wait for menu to open
+            print(f"\n>>> TRIGGERING EMOTE: {emote_name} <<<")
             
-            # Step 2: Click the specific emote
-            emote_pos = self.emote_positions[emote_name]
-            print(f"  2. Clicking {emote_name} at ({emote_pos[0]}, {emote_pos[1]})...")
-            pyautogui.click(emote_pos[0], emote_pos[1])
+            # Step 1: Press emote button to open menu
+            print(f"  1. Opening emote menu (pressing '{self.emote_button_key}')...")
+            pyautogui.press(self.emote_button_key)
+            time.sleep(self.key_delay)
             
-            # Update last click time
-            self.last_click_time = time.time()
-            print("  ✓ Emote clicked successfully!")
+            # Step 2: Press specific emote key
+            print(f"  2. Selecting emote (pressing '{emote_key}')...")
+            pyautogui.press(emote_key)
+            
+            # Update last emote time
+            self.last_emote_time = time.time()
+            print("  ✓ Emote triggered successfully!")
             return True
             
         except Exception as e:
-            print(f"Error clicking emote: {e}")
+            print(f"Error triggering emote: {e}")
             return False
     
     def get_cooldown_remaining(self):
-        """Get time remaining until next emote can be clicked"""
-        elapsed = time.time() - self.last_click_time
+        """Get time remaining until next emote can be triggered"""
+        elapsed = time.time() - self.last_emote_time
         remaining = max(0, self.cooldown - elapsed)
         return remaining
     
     def is_ready(self):
-        """Check if clicker is ready (not on cooldown)"""
+        """Check if controller is ready (not on cooldown)"""
         return self.get_cooldown_remaining() == 0
     
     def set_cooldown(self, seconds):
         """Change the cooldown time"""
         self.cooldown = seconds
+    
+    def set_key_mapping(self, emote_name, key):
+        """
+        Add or update key mapping for an emote
+        
+        Args:
+            emote_name: Name of emote
+            key: Keyboard key to trigger it
+        """
+        self.emote_key_map[emote_name] = key
+        print(f"Updated key mapping: {emote_name} -> '{key}'")
+    
+    def get_mapped_emotes(self):
+        """Get list of all mapped emote names"""
+        return list(self.emote_key_map.keys())
+    
+    def print_key_mapping(self):
+        """Print current key mapping configuration"""
+        print("\n" + "="*60)
+        print("BLUESTACKS EMOTE KEY MAPPING")
+        print("="*60)
+        print(f"Emote Menu Key: '{self.emote_button_key}'")
+        print(f"Cooldown: {self.cooldown}s")
+        print("\nEmote Key Bindings:")
+        print("-" * 60)
+        for emote_name, key in sorted(self.emote_key_map.items()):
+            print(f"  {emote_name:20} -> '{key}'")
+        print("="*60 + "\n")
 
 
 # ============================================================
-# CALIBRATION TOOL
+# CONFIGURATION HELPER
 # ============================================================
 
-def calibrate():
-    """Interactive calibration for emote positions"""
+def setup_bluestacks_keys():
+    """
+    Interactive guide for setting up BlueStacks key mapping
+    """
     print("\n" + "="*60)
-    print("CLASH ROYALE EMOTE POSITION CALIBRATION")
+    print("BLUESTACKS KEY MAPPING SETUP GUIDE")
     print("="*60)
-    print("\nInstructions:")
-    print("1. Open Clash Royale and start a match")
-    print("2. Move your mouse to each position when prompted")
-    print("3. Press ENTER to record each position")
-    print("\n" + "="*60)
     
-    input("\n[Step 1/2] Move mouse to the EMOTE BUTTON and press ENTER...")
-    button_x, button_y = pyautogui.position()
-    print(f"✓ Emote button recorded: ({button_x}, {button_y})")
-    
-    print("\n[Step 2/2] Now click the emote button to open the menu...")
-    input("Press ENTER when the emote menu is open...")
-    
-    emote_positions = {}
-    
-    # Common Clash Royale emotes
-    emote_list = [
-        "laughing",
-        "crying", 
-        "angry",
-        "king_laugh",
-        "thumbs_up",
-        "surprised",
-        "chicken",
-        "princess_yawn",
-        "goblin_kiss"
-    ]
-    
-    print("\nNow record each emote position:")
-    for emote_name in emote_list:
-        response = input(f"\n  Move to '{emote_name}' and press ENTER (or type 'skip')... ")
-        if response.lower() == 'skip':
-            continue
-        x, y = pyautogui.position()
-        emote_positions[emote_name] = (x, y)
-        print(f"  ✓ {emote_name}: ({x}, {y})")
-    
-    # Output the configuration
-    print("\n" + "="*60)
-    print("CALIBRATION COMPLETE!")
-    print("="*60)
-    print("\nCopy this into your config.py:\n")
+    print("\nSTEP 1: Configure BlueStacks Key Mapping")
     print("-" * 60)
-    print(f"\nEMOTE_BUTTON_POS = ({button_x}, {button_y})")
-    print(f"\nEMOTE_POSITIONS = {{")
-    for name, (x, y) in emote_positions.items():
-        print(f'    "{name}": ({x}, {y}),')
-    print("}")
+    print("1. Open BlueStacks")
+    print("2. Start Clash Royale")
+    print("3. Click the keyboard icon (⌨️) in BlueStacks toolbar")
+    print("4. Click 'Advanced editor' or 'Key mapping editor'")
+    print("5. Map keys to emote positions:")
+    print()
+    print("   Recommended layout:")
+    print("   - Press 'E' to open emote menu")
+    print("   - Press number/letter keys for emotes:")
+    print()
+    print("     ROW 1: 1  2  3  4")
+    print("     ROW 2: Q  W  R  T")
+    print("     ROW 3: A  S  D  F")
+    print("     ROW 4: Z  X  C  V")
+    print()
+    print("6. Save the key mapping in BlueStacks")
+    
     print("\n" + "-" * 60)
-    print("\nYou can now use these in your code!")
-    print("="*60)
+    input("Press ENTER when you've configured BlueStacks keys...")
+    
+    print("\nSTEP 2: Test Your Configuration")
+    print("-" * 60)
+    print("Let's test if your key mapping works!")
+    print()
+    
+    # Create controller with default mapping
+    controller = EmoteClicker()
+    controller.print_key_mapping()
+    
+    print("Now testing keyboard controls...")
+    print("Make sure BlueStacks is in focus!")
+    input("Press ENTER to test opening emote menu...")
+    
+    pyautogui.press('e')
+    time.sleep(0.5)
+    
+    print("Did the emote menu open? (yes/no)")
+    response = input("> ").lower()
+    
+    if response != 'yes':
+        print("\n⚠️  Emote menu didn't open!")
+        print("Solutions:")
+        print("1. Make sure BlueStacks window is focused/active")
+        print("2. Check that 'E' is mapped to emote button in BlueStacks")
+        print("3. Try clicking on BlueStacks window first")
+        return
+    
+    print("\n✓ Great! Emote menu opened.")
+    print("\nNow let's test triggering an emote...")
+    input("Press ENTER to trigger 'laughing' emote (key '1')...")
+    
+    pyautogui.press('1')
+    
+    print("\nDid the emote play? (yes/no)")
+    response = input("> ").lower()
+    
+    if response == 'yes':
+        print("\n🎉 SUCCESS! Your BlueStacks key mapping is working!")
+        print("\nYou can now use this controller with your emote detection code.")
+    else:
+        print("\n⚠️  Emote didn't trigger!")
+        print("Solutions:")
+        print("1. Check that number keys are mapped correctly in BlueStacks")
+        print("2. Make sure emote menu was still open")
+        print("3. Verify key positions match your emote grid")
+    
+    print("\n" + "="*60)
 
 
 # ============================================================
 # TEST MODE
 # ============================================================
 
-def test_mode():
-    """Test the clicker with keyboard controls"""
+def test_emote_controller():
+    """Test the emote controller with keyboard input"""
     print("\n" + "="*60)
-    print("EMOTE CLICKER TEST MODE")
+    print("BLUESTACKS EMOTE CONTROLLER - TEST MODE")
     print("="*60)
-    print("\nYou need to add your positions first!")
-    print("Example configuration:\n")
     
-    # Example positions (CHANGE THESE TO YOUR ACTUAL POSITIONS!)
-    EMOTE_BUTTON_POS = (1800, 950)
-    EMOTE_POSITIONS = {
-        "laughing": (1500, 700),
-        "crying": (1600, 700),
-        "angry": (1700, 700),
-    }
+    print("\nMake sure:")
+    print("✓ BlueStacks is running")
+    print("✓ Clash Royale is open")
+    print("✓ BlueStacks window is focused")
+    print("✓ You've configured key mapping in BlueStacks")
     
-    print(f"EMOTE_BUTTON_POS = {EMOTE_BUTTON_POS}")
-    print(f"EMOTE_POSITIONS = {EMOTE_POSITIONS}\n")
+    input("\nPress ENTER to continue...")
     
-    response = input("Have you updated these positions? (yes/no): ")
-    if response.lower() != 'yes':
-        print("\nPlease run calibrate() first or update the positions above!")
-        return
+    # Create controller
+    controller = EmoteClicker()
+    controller.print_key_mapping()
     
-    clicker = EmoteClicker(EMOTE_BUTTON_POS, EMOTE_POSITIONS)
-    
-    print("\n" + "="*60)
     print("TEST CONTROLS:")
-    print("  Press 1 = Laughing emote")
-    print("  Press 2 = Crying emote")
-    print("  Press 3 = Angry emote")
-    print("  Press Q = Quit")
+    print("  1 = Laughing emote")
+    print("  2 = Crying emote")
+    print("  3 = Angry emote")
+    print("  4 = King thumbs up")
+    print("  q = Quit test")
     print("="*60)
+    
+    print("\nFocus BlueStacks window now!")
+    time.sleep(2)
     
     while True:
-        key = input("\nPress a key: ").lower()
+        key = input("\nPress a key (or 'q' to quit): ").lower()
         
-        if key == '1':
-            clicker.click_emote("laughing")
-        elif key == '2':
-            clicker.click_emote("crying")
-        elif key == '3':
-            clicker.click_emote("angry")
-        elif key == 'q':
+        if key == 'q':
             print("Exiting test mode...")
             break
+        elif key == '1':
+            controller.trigger_emote("laughing")
+        elif key == '2':
+            controller.trigger_emote("crying")
+        elif key == '3':
+            controller.trigger_emote("angry")
+        elif key == '4':
+            controller.trigger_emote("king_thumbs_up")
         else:
-            print("Invalid key!")
+            print("Invalid key! Use 1-4 or 'q'")
+
+
+# ============================================================
+# INTEGRATION EXAMPLE
+# ============================================================
+
+def example_integration():
+    """
+    Example showing how to integrate with emote detection
+    """
+    print("""
+# ============================================================
+# INTEGRATION WITH YOUR EMOTE DETECTION CODE
+# ============================================================
+
+# In your main emote detection script:
+
+from bluestacks_emote_controller import BlueStacksEmoteController
+
+# Initialize controller
+emote_controller = BlueStacksEmoteController(
+    emote_button_key='e',  # Key that opens emote menu
+    cooldown=1.5           # Seconds between emotes
+)
+
+# In your detection loop:
+def on_emote_detected(emote_name):
+    '''Called when your face/hand detection recognizes an emote'''
+    
+    # Check if we can trigger an emote
+    if emote_controller.is_ready():
+        # Trigger the emote in BlueStacks
+        success = emote_controller.trigger_emote(emote_name)
+        
+        if success:
+            print(f"Triggered {emote_name} in game!")
+        else:
+            print(f"Failed to trigger {emote_name}")
+    else:
+        remaining = emote_controller.get_cooldown_remaining()
+        print(f"Cooldown: {remaining:.1f}s remaining")
+
+# Example usage:
+# When you detect "laughing" expression + "thumbs_up" gesture:
+on_emote_detected("laughing")
+
+# ============================================================
+""")
 
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("EMOTE CLICKER SETUP")
+    print("BLUESTACKS EMOTE CONTROLLER")
     print("="*60)
     print("\nWhat would you like to do?")
-    print("  1. Calibrate emote positions")
-    print("  2. Test the clicker")
+    print("  1. Setup guide for BlueStacks key mapping")
+    print("  2. Test emote controller")
+    print("  3. Show integration example")
     print("="*60)
     
-    choice = input("\nEnter choice (1 or 2): ")
+    choice = input("\nEnter choice (1, 2, or 3): ")
     
     if choice == "1":
-        calibrate()
+        setup_bluestacks_keys()
     elif choice == "2":
-        test_mode()
+        test_emote_controller()
+    elif choice == "3":
+        example_integration()
     else:
         print("Invalid choice!")
