@@ -8,7 +8,7 @@ from collections import deque
 
 
 class GestureRecognizer:
-    def __init__(self, smoothing_frames=5, closed_threshold=0.08):
+    def __init__(self, smoothing_frames=5, closed_threshold=0.30):
         """
         Initialize gesture recognizer
         
@@ -59,6 +59,7 @@ class GestureRecognizer:
         # Add small buffer for tolerance
         return tip['y'] < pip['y'] - 0.02
     
+
     def detect_gesture(self, landmarks):
         """
         Detect if hand is open or closed
@@ -91,24 +92,14 @@ class GestureRecognizer:
         
         # Hand is open if at least 3 fingers are extended
         open_gesture = sum(fingers_extended) >= 3
-        
-        # Method 2: Distance-based (backup/additional check)
-        # Calculate average distance from fingertips to palm center
-        wrist = landmarks[0]
-        fingertip_indices = [4, 8, 12, 16, 20]
-        
-        total_distance = 0
-        for idx in fingertip_indices:
-            total_distance += self.calculate_distance(landmarks[idx], wrist)
-        
-        avg_distance = total_distance / len(fingertip_indices)
-        
-        # If distance is small, hand is likely closed
-        distance_closed = avg_distance < self.closed_threshold
+
+        # For Debugging
+        # print(f"Fingers extended: {fingers_extended}, Count: {sum(fingers_extended)}, Open: {open_gesture}")
+        # print(f"Distance closed: {distance_closed}, Avg dist: {avg_distance:.3f}")
         
         # Combine both methods
-        # Hand is closed if fingers are not extended AND distance is small
-        if not open_gesture and distance_closed:
+        # Hand is closed if fingers are not extended
+        if not open_gesture:
             gesture = "closed"
         else:
             gesture = "open"
