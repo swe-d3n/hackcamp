@@ -114,12 +114,12 @@ class MouseController:
     def handle_click(self, gesture):
         """
         Handle click based on gesture
-        
+
         Args:
             gesture: Current gesture ("open" or "closed")
         """
         current_time = time.time()
-        
+
         # Detect transition from open to closed (click trigger)
         if gesture == "closed" and self.previous_gesture == "open":
             # Check if enough time has passed since last click
@@ -132,18 +132,18 @@ class MouseController:
                 except pyautogui.FailSafeException:
                     print("FailSafe triggered during click")
                     raise
-        
+
         # Update clicking state
         if gesture == "open":
             self.is_clicking = False
-        
+
         # Update previous gesture
         self.previous_gesture = gesture
-    
+
     def update(self, hand_x, hand_y, gesture):
         """
         Update cursor position and handle clicks
-        
+
         Args:
             hand_x: Normalized hand x position (0-1)
             hand_y: Normalized hand y position (0-1)
@@ -151,7 +151,7 @@ class MouseController:
         """
         # Move cursor
         self.move_cursor(hand_x, hand_y)
-        
+
         # Handle clicks
         self.handle_click(gesture)
     
