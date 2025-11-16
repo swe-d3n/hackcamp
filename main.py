@@ -33,7 +33,8 @@ class ClashRoyaleEmoteController:
         self.hand_detector = HandDetector(
             max_num_hands=Config.MAX_NUM_HANDS,
             min_detection_confidence=Config.MIN_DETECTION_CONFIDENCE,
-            min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE
+            min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE,
+            model_complexity=getattr(Config, 'MODEL_COMPLEXITY', 0)
         )
         
         print("Initializing face detector...")
@@ -41,11 +42,30 @@ class ClashRoyaleEmoteController:
         
         print("Initializing emote matcher...")
         self.emote_matcher = EmoteMatcher()
+        print("Initializing mouse controller...")
+        self.controller = MouseController(
+            smoothing_factor=Config.CURSOR_SMOOTHING_FACTOR,
+            click_cooldown=Config.CLICK_COOLDOWN,
+            screen_margin=Config.SCREEN_MARGIN,
+            movement_threshold=Config.MOVEMENT_THRESHOLD,
+            tracking_zone_min=Config.TRACKING_ZONE_MIN,
+            tracking_zone_max=Config.TRACKING_ZONE_MAX
+        )
         
         # FPS tracking
         self.fps = 0
         self.frame_count = 0
         self.fps_start_time = time.time()
+        
+        # Frame skipping for performance
+        self.process_every_n_frames = getattr(Config, 'PROCESS_EVERY_N_FRAMES', 1)
+        self.frame_counter = 0
+        
+        # Cache last detection results for frame skipping
+        self.last_hands_data = []
+        self.last_gesture = "open"
+        self.last_hand_x = 0.5
+        self.last_hand_y = 0.5
         
         # Running state
         self.running = False
@@ -59,6 +79,7 @@ class ClashRoyaleEmoteController:
         self.current_gesture = None
         self.matched_emote = None
         
+        print(f"Frame skipping: Process every {self.process_every_n_frames} frame(s)")
         print("Initialization complete!")
         print("="*50)
         
@@ -145,6 +166,7 @@ class ClashRoyaleEmoteController:
             self.fps_start_time = time.time()
     
     def click_emote(self, emote_name, click_x=None, click_y=None):
+    def draw_ui(self, frame, gesture, hand_detected):
         """
         Click the emote button and then the specific emote at the hand position
         
@@ -152,6 +174,9 @@ class ClashRoyaleEmoteController:
             emote_name: Name of the emote to click
             click_x: X coordinate from hand position (screen coordinates)
             click_y: Y coordinate from hand position (screen coordinates)
+            frame: Camera frame
+            gesture: Current gesture ("open", "closed", or None)
+            hand_detected: Whether a hand was detected
         """
         # Check cooldown
         current_time = time.time()
@@ -194,6 +219,36 @@ class ClashRoyaleEmoteController:
         h, w, _ = frame.shape
         
         # Semi-transparent overlay
+
+        # Draw tracking zone boundaries
+        if Config.SHOW_TRACKING_ZONE:
+            zone_x1 = int(w * Config.TRACKING_ZONE_MIN)
+            zone_y1 = int(h * Config.TRACKING_ZONE_MIN)
+            zone_x2 = int(w * Config.TRACKING_ZONE_MAX)
+            zone_y2 = int(h * Config.TRACKING_ZONE_MAX)
+
+            # Draw tracking zone rectangle
+            cv2.rectangle(frame, (zone_x1, zone_y1), (zone_x2, zone_y2),
+                         (0, 255, 255), 2)  # Yellow border
+
+            # Add corner markers for better visibility
+            marker_size = 20
+            color = (0, 255, 255)
+            thickness = 3
+            # Top-left corner
+            cv2.line(frame, (zone_x1, zone_y1), (zone_x1 + marker_size, zone_y1), color, thickness)
+            cv2.line(frame, (zone_x1, zone_y1), (zone_x1, zone_y1 + marker_size), color, thickness)
+            # Top-right corner
+            cv2.line(frame, (zone_x2, zone_y1), (zone_x2 - marker_size, zone_y1), color, thickness)
+            cv2.line(frame, (zone_x2, zone_y1), (zone_x2, zone_y1 + marker_size), color, thickness)
+            # Bottom-left corner
+            cv2.line(frame, (zone_x1, zone_y2), (zone_x1 + marker_size, zone_y2), color, thickness)
+            cv2.line(frame, (zone_x1, zone_y2), (zone_x1, zone_y2 - marker_size), color, thickness)
+            # Bottom-right corner
+            cv2.line(frame, (zone_x2, zone_y2), (zone_x2 - marker_size, zone_y2), color, thickness)
+            cv2.line(frame, (zone_x2, zone_y2), (zone_x2, zone_y2 - marker_size), color, thickness)
+
+        # Semi-transparent overlay for better text visibility
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, 230), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
@@ -224,6 +279,24 @@ class ClashRoyaleEmoteController:
         if self.matched_emote:
             cv2.putText(frame, f"MATCHED: {self.matched_emote}", (10, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+
+        # Get cursor info for drag status
+        cursor_info = self.controller.get_cursor_info()
+
+        # Gesture status
+        if Config.SHOW_GESTURE_STATUS and gesture:
+            if cursor_info['is_dragging']:
+                gesture_text = "DRAGGING"
+                color = (255, 0, 255)  # Magenta for dragging
+            elif gesture == "open":
+                gesture_text = "HOVER"
+                color = Config.COLOR_OPEN_HAND
+            else:
+                gesture_text = "CLOSED"
+                color = Config.COLOR_CLOSED_HAND
+
+            cv2.putText(frame, f"Gesture: {gesture_text}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             y_offset += 35
         
         # Hand position on screen
@@ -303,6 +376,58 @@ class ClashRoyaleEmoteController:
                 # Click emote at the hand position
                 self.click_emote(matched_emote, hand_screen_x, hand_screen_y)
         
+        # Increment frame counter
+        self.frame_counter += 1
+        
+        # Decide whether to process hand detection this frame
+        should_process = (self.frame_counter % self.process_every_n_frames == 0)
+        
+        gesture = self.last_gesture
+        hand_detected = len(self.last_hands_data) > 0
+        hand_x = self.last_hand_x
+        hand_y = self.last_hand_y
+
+        if should_process:
+            # Detect hands (expensive operation)
+            frame, hands_data = self.detector.find_hands(
+                frame, 
+                draw=Config.DRAW_HAND_LANDMARKS
+            )
+            
+            # Cache results
+            self.last_hands_data = hands_data
+            hand_detected = len(hands_data) > 0
+
+            if hand_detected:
+                # Get first hand
+                landmarks = hands_data[0]['landmarks']
+
+                # Calculate palm center (average of palm base landmarks)
+                palm_landmarks = [0]
+                hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
+                hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
+                
+                # Cache position
+                self.last_hand_x = hand_x
+                self.last_hand_y = hand_y
+
+                # Recognize gesture
+                gesture = self.recognizer.get_smoothed_gesture(landmarks)
+                self.last_gesture = gesture
+        else:
+            # Use cached data but still draw landmarks if we have them
+            if Config.DRAW_HAND_LANDMARKS and hand_detected:
+                # We skip drawing on non-processed frames for performance
+                pass
+
+        # Update mouse control using cached or new data
+        if hand_detected:
+            try:
+                self.controller.update(hand_x, hand_y, gesture)
+            except Exception as e:
+                print(f"Mouse control error: {e}")
+                return False
+
         # Calculate FPS
         self.calculate_fps()
         
@@ -310,6 +435,8 @@ class ClashRoyaleEmoteController:
         if Config.SHOW_CAMERA_FEED:
             self.draw_ui(frame, hand_screen_x, hand_screen_y)
             cv2.imshow("Clash Royale Emote Controller", frame)
+            self.draw_ui(frame, gesture, hand_detected)
+            cv2.imshow("Hand Mouse Control", frame)
         
         return True
     
@@ -380,6 +507,8 @@ class ClashRoyaleEmoteController:
                 
                 if Config.MAX_FPS > 0:
                     time.sleep(1.0 / Config.MAX_FPS)
+                # Optional: Cap FPS to reduce CPU usage
+                # Removed sleep to maximize FPS - the processing itself is the bottleneck
         
         except KeyboardInterrupt:
             print("\nInterrupted by user")

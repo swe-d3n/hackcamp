@@ -9,7 +9,8 @@ import numpy as np
 
 
 class HandDetector:
-    def __init__(self, max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5):
+    def __init__(self, max_num_hands=1, min_detection_confidence=0.7, 
+                 min_tracking_confidence=0.5, model_complexity=0):
         """
         Initialize MediaPipe hand detector
         
@@ -17,13 +18,16 @@ class HandDetector:
             max_num_hands: Maximum number of hands to detect
             min_detection_confidence: Minimum confidence for detection
             min_tracking_confidence: Minimum confidence for tracking
+            model_complexity: 0 for Lite model (faster), 1 for Full model (more accurate)
         """
         self.mp_hands = mp.solutions.hands
         self.mp_draw = mp.solutions.drawing_utils
+        self.mp_drawing_styles = mp.solutions.drawing_styles
         
         self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
+            static_image_mode=False,  # Video mode for tracking (faster)
             max_num_hands=max_num_hands,
+            model_complexity=model_complexity,  # 0 = Lite, 1 = Full
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence
         )
@@ -35,6 +39,9 @@ class HandDetector:
         self.MIDDLE_TIP = 12
         self.RING_TIP = 16
         self.PINKY_TIP = 20
+        
+        # Cache for frame dimensions
+        self._frame_shape = None
         
     def find_hands(self, frame, draw=True):
         """
@@ -48,11 +55,23 @@ class HandDetector:
             tuple: (processed_frame, hands_data)
                 hands_data is list of dicts with 'landmarks' and 'handedness'
         """
+        # Cache frame shape for efficiency
+        if self._frame_shape is None or self._frame_shape != frame.shape:
+            self._frame_shape = frame.shape
+            self._h, self._w, self._c = frame.shape
+        
         # Convert BGR to RGB for MediaPipe
+        # Use cv2.cvtColor which is optimized
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Set writeable to False for performance (MediaPipe recommendation)
+        rgb_frame.flags.writeable = False
         
         # Process frame
         results = self.hands.process(rgb_frame)
+        
+        # Set writeable back to True
+        rgb_frame.flags.writeable = True
         
         hands_data = []
         
@@ -63,16 +82,17 @@ class HandDetector:
                     self.mp_draw.draw_landmarks(
                         frame, 
                         hand_landmarks, 
-                        self.mp_hands.HAND_CONNECTIONS
+                        self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                        self.mp_drawing_styles.get_default_hand_connections_style()
                     )
                 
                 # Extract landmark coordinates
                 landmarks = []
-                h, w, c = frame.shape
                 
                 for lm in hand_landmarks.landmark:
                     # Convert normalized coordinates to pixel coordinates
-                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    cx, cy = int(lm.x * self._w), int(lm.y * self._h)
                     landmarks.append({
                         'x': lm.x,  # Normalized (0-1)
                         'y': lm.y,  # Normalized (0-1)
@@ -149,7 +169,7 @@ if __name__ == "__main__":
     camera = CameraHandler()
     camera.start()
     
-    detector = HandDetector()
+    detector = HandDetector(model_complexity=0)  # Use lite model for testing
     
     print("Show your hand to the camera. Press 'q' to quit.")
     
