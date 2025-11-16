@@ -32,7 +32,8 @@ class HandMouseApp:
         self.detector = HandDetector(
             max_num_hands=Config.MAX_NUM_HANDS,
             min_detection_confidence=Config.MIN_DETECTION_CONFIDENCE,
-            min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE
+            min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE,
+            model_complexity=getattr(Config, 'MODEL_COMPLEXITY', 0)
         )
         
         print("Initializing gesture recognizer...")
@@ -56,9 +57,20 @@ class HandMouseApp:
         self.frame_count = 0
         self.fps_start_time = time.time()
         
+        # Frame skipping for performance
+        self.process_every_n_frames = getattr(Config, 'PROCESS_EVERY_N_FRAMES', 1)
+        self.frame_counter = 0
+        
+        # Cache last detection results for frame skipping
+        self.last_hands_data = []
+        self.last_gesture = "open"
+        self.last_hand_x = 0.5
+        self.last_hand_y = 0.5
+        
         # Running state
         self.running = False
         
+        print(f"Frame skipping: Process every {self.process_every_n_frames} frame(s)")
         print("Initialization complete!")
         print("="*50)
         
@@ -191,29 +203,52 @@ class HandMouseApp:
             print("Failed to read frame")
             return False
         
-        # Detect hands
-        frame, hands_data = self.detector.find_hands(
-            frame, 
-            draw=Config.DRAW_HAND_LANDMARKS
-        )
+        # Increment frame counter
+        self.frame_counter += 1
         
-        gesture = None
-        hand_detected = len(hands_data) > 0
+        # Decide whether to process hand detection this frame
+        should_process = (self.frame_counter % self.process_every_n_frames == 0)
+        
+        gesture = self.last_gesture
+        hand_detected = len(self.last_hands_data) > 0
+        hand_x = self.last_hand_x
+        hand_y = self.last_hand_y
 
+        if should_process:
+            # Detect hands (expensive operation)
+            frame, hands_data = self.detector.find_hands(
+                frame, 
+                draw=Config.DRAW_HAND_LANDMARKS
+            )
+            
+            # Cache results
+            self.last_hands_data = hands_data
+            hand_detected = len(hands_data) > 0
+
+            if hand_detected:
+                # Get first hand
+                landmarks = hands_data[0]['landmarks']
+
+                # Calculate palm center (average of palm base landmarks)
+                palm_landmarks = [0]
+                hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
+                hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
+                
+                # Cache position
+                self.last_hand_x = hand_x
+                self.last_hand_y = hand_y
+
+                # Recognize gesture
+                gesture = self.recognizer.get_smoothed_gesture(landmarks)
+                self.last_gesture = gesture
+        else:
+            # Use cached data but still draw landmarks if we have them
+            if Config.DRAW_HAND_LANDMARKS and hand_detected:
+                # We skip drawing on non-processed frames for performance
+                pass
+
+        # Update mouse control using cached or new data
         if hand_detected:
-            # Get first hand
-            landmarks = hands_data[0]['landmarks']
-
-            # Calculate palm center (average of palm base landmarks)
-            # Landmarks: 0=wrist, 1=thumb_cmc, 5=index_mcp, 9=middle_mcp, 13=ring_mcp, 17=pinky_mcp
-            palm_landmarks = [0]
-            hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
-            hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
-
-            # Recognize gesture
-            gesture = self.recognizer.get_smoothed_gesture(landmarks)
-
-            # Update mouse control
             try:
                 self.controller.update(hand_x, hand_y, gesture)
             except Exception as e:
@@ -265,8 +300,7 @@ class HandMouseApp:
                     break
                 
                 # Optional: Cap FPS to reduce CPU usage
-                if Config.MAX_FPS > 0:
-                    time.sleep(1.0 / Config.MAX_FPS)
+                # Removed sleep to maximize FPS - the processing itself is the bottleneck
         
         except KeyboardInterrupt:
             print("\nInterrupted by user")

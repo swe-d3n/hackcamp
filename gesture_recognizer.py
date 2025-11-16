@@ -77,7 +77,7 @@ class GestureRecognizer:
         tip = landmarks[finger_tip_idx]
         pip = landmarks[finger_pip_idx]
         
-        return tip['x'] > pip['x'] -0.01
+        return tip['x'] > pip['x'] - 0.01
     
     
     
@@ -115,15 +115,11 @@ class GestureRecognizer:
         fingers_extended.append(self.is_thumb_extended(landmarks, 4, 2))
 
         # Hand is open if at least 3 fingers are extended
-
         total_fingers_extended = sum(fingers_extended)
         current_time = time.time()
 
         # Determine if hand is open (3+ fingers)
         open_gesture = total_fingers_extended >= 3
-
-        # For Debugging
-        print(f"Fingers extended: {fingers_extended}, Count: {sum(fingers_extended)}, Open: {open_gesture}")
         
         # Combine both methods
         # Hand is closed if fingers are not extended
@@ -176,6 +172,7 @@ class GestureRecognizer:
 
 if __name__ == "__main__":
     # Test gesture recognizer
+    import cv2
     from camera_handler import CameraHandler
     from hand_detector import HandDetector
     
