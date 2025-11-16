@@ -2,7 +2,7 @@
 Gesture Recognizer Module
 Recognizes hand gestures (open/closed)
 """
-
+import cv2
 import numpy as np
 from collections import deque
 import time

@@ -2,6 +2,7 @@
 Configuration File
 Centralized settings for the hand tracking mouse control system
 """
+import numpy as np
 
 
 class Config:
@@ -54,7 +55,29 @@ class Config:
     COLOR_FPS_MEDIUM = (0, 255, 255)  # Yellow (15-25 FPS)
     COLOR_FPS_BAD = (0, 0, 255)  # Red (<15 FPS)
 
+    EMOTE_BUTTON_POS = (1800, 950)  # CHANGE THIS
+    
+    # Individual emote positions in the emote menu
+    # These are examples - calibrate for your setup!
+    EMOTE_POSITIONS = {
+        "laughing": (1500, 700),
+        "crying": (1600, 700),
+        "angry": (1700, 700),
+        "king_thumbs_up": (1800, 700),
+        "thumbs_up": (1500, 800),
+        "chicken": (1600, 800),
+        "goblin_kiss": (1700, 800),
+        "princess_yawn": (1800, 800),
+        "wow": (1500, 900),
+        "thinking": (1600, 900),
+        "screaming": (1700, 900),
+        "king_laugh": (1800, 900),
+        "goblin_laugh": (1500, 1000),
+        "princess_cry": (1600, 1000),
+        "goblin_angry": (1700, 1000),
+    }
 
+ACTIVE_CONFIG = Config()
 # Preset configurations for different use cases
 
 class HighPerformanceConfig(Config):
