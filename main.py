@@ -171,7 +171,7 @@ class HandMouseApp:
 
             # Calculate palm center (average of palm base landmarks)
             # Landmarks: 0=wrist, 1=thumb_cmc, 5=index_mcp, 9=middle_mcp, 13=ring_mcp, 17=pinky_mcp
-            palm_landmarks = [0, 1, 5, 9, 13, 17]
+            palm_landmarks = [0]
             hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
             hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
 
