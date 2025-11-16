@@ -71,7 +71,7 @@ class HandMouseApp:
             self.frame_count = 0
             self.fps_start_time = time.time()
     
-    def draw_ui(self, frame, gesture, hand_detected, finger_count=0):
+    def draw_ui(self, frame, gesture, hand_detected):
         """
         Draw UI overlay on frame
 
@@ -79,7 +79,6 @@ class HandMouseApp:
             frame: Camera frame
             gesture: Current gesture ("open", "closed", or None)
             hand_detected: Whether a hand was detected
-            finger_count: Number of fingers detected
         """
         h, w, _ = frame.shape
 
@@ -113,14 +112,6 @@ class HandMouseApp:
 
         # Get cursor info for drag status
         cursor_info = self.controller.get_cursor_info()
-
-        # Gesture status with drag indication
-        # Finger count display
-        if hand_detected:
-            finger_color = (255, 200, 0)  # Cyan color for finger count
-            cv2.putText(frame, f"Fingers: {finger_count}", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, finger_color, 2)
-            y_offset += 35
 
         # Gesture status
         if Config.SHOW_GESTURE_STATUS and gesture:
@@ -178,7 +169,6 @@ class HandMouseApp:
         
         gesture = None
         hand_detected = len(hands_data) > 0
-        finger_count = 0
 
         if hand_detected:
             # Get first hand
@@ -193,9 +183,6 @@ class HandMouseApp:
             # Recognize gesture
             gesture = self.recognizer.get_smoothed_gesture(landmarks)
 
-            # Get finger count from recognizer
-            finger_count = self.recognizer.current_finger_count
-
             # Update mouse control
             try:
                 self.controller.update(hand_x, hand_y, gesture)
@@ -208,7 +195,7 @@ class HandMouseApp:
 
         # Draw UI
         if Config.SHOW_CAMERA_FEED:
-            self.draw_ui(frame, gesture, hand_detected, finger_count)
+            self.draw_ui(frame, gesture, hand_detected)
             cv2.imshow("Hand Mouse Control", frame)
         
         return True
