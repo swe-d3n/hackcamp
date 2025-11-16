@@ -71,7 +71,7 @@ class HandMouseApp:
             self.frame_count = 0
             self.fps_start_time = time.time()
     
-    def draw_ui(self, frame, gesture, hand_detected):
+    def draw_ui(self, frame, gesture, hand_detected, finger_count=0):
         """
         Draw UI overlay on frame
 
@@ -79,12 +79,13 @@ class HandMouseApp:
             frame: Camera frame
             gesture: Current gesture ("open", "closed", or None)
             hand_detected: Whether a hand was detected
+            finger_count: Number of fingers detected
         """
         h, w, _ = frame.shape
 
         # Semi-transparent overlay for better text visibility
         overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (w, 120), (0, 0, 0), -1)
+        cv2.rectangle(overlay, (0, 0), (w, 150), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
 
         y_offset = 30
@@ -110,13 +111,27 @@ class HandMouseApp:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         y_offset += 35
 
+        # Get cursor info for drag status
+        cursor_info = self.controller.get_cursor_info()
+
+        # Gesture status with drag indication
+        # Finger count display
+        if hand_detected:
+            finger_color = (255, 200, 0)  # Cyan color for finger count
+            cv2.putText(frame, f"Fingers: {finger_count}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, finger_color, 2)
+            y_offset += 35
+
         # Gesture status
         if Config.SHOW_GESTURE_STATUS and gesture:
-            if gesture == "open":
+            if cursor_info['is_dragging']:
+                gesture_text = "DRAGGING"
+                color = (255, 0, 255)  # Magenta for dragging
+            elif gesture == "open":
                 gesture_text = "HOVER"
                 color = Config.COLOR_OPEN_HAND
             else:
-                gesture_text = "CLICK"
+                gesture_text = "CLOSED"
                 color = Config.COLOR_CLOSED_HAND
 
             cv2.putText(frame, f"Gesture: {gesture_text}", (10, y_offset),
@@ -125,7 +140,6 @@ class HandMouseApp:
 
         # Cursor position
         if Config.SHOW_CURSOR_POSITION:
-            cursor_info = self.controller.get_cursor_info()
             cv2.putText(frame,
                        f"Cursor: ({cursor_info['x']}, {cursor_info['y']})",
                        (10, y_offset),
@@ -133,7 +147,7 @@ class HandMouseApp:
 
         # Instructions (bottom of screen)
         instructions = [
-            "Controls: Open Hand = Move | Closed Fist = Click",
+            "Controls: Open Hand = Move | Close & Hold = Drag | Quick Close = Click",
             "Press 'Q' to quit | Move mouse to corner for emergency stop"
         ]
 
@@ -164,6 +178,7 @@ class HandMouseApp:
         
         gesture = None
         hand_detected = len(hands_data) > 0
+        finger_count = 0
 
         if hand_detected:
             # Get first hand
@@ -178,6 +193,9 @@ class HandMouseApp:
             # Recognize gesture
             gesture = self.recognizer.get_smoothed_gesture(landmarks)
 
+            # Get finger count from recognizer
+            finger_count = self.recognizer.current_finger_count
+
             # Update mouse control
             try:
                 self.controller.update(hand_x, hand_y, gesture)
@@ -190,7 +208,7 @@ class HandMouseApp:
 
         # Draw UI
         if Config.SHOW_CAMERA_FEED:
-            self.draw_ui(frame, gesture, hand_detected)
+            self.draw_ui(frame, gesture, hand_detected, finger_count)
             cv2.imshow("Hand Mouse Control", frame)
         
         return True
@@ -207,7 +225,8 @@ class HandMouseApp:
             print("="*50)
             print("\nControls:")
             print("  • Open hand = Move cursor")
-            print("  • Close fist = Click")
+            print("  • Close fist and hold = Drag")
+            print("  • Close and release quickly = Click")
             print("  • Press 'Q' = Quit")
             print("  • Move mouse to corner = Emergency stop")
             print("\nStarting in 3 seconds...")
@@ -247,6 +266,10 @@ class HandMouseApp:
         """Clean up resources"""
         print("\nCleaning up...")
         self.running = False
+        
+        # Clean up mouse controller (release any held buttons)
+        if hasattr(self, 'controller'):
+            self.controller.cleanup()
         
         if hasattr(self, 'detector'):
             self.detector.release()
