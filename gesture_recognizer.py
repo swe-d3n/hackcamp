@@ -24,24 +24,19 @@ class GestureRecognizer:
         
         # Previous gesture state
         self.previous_gesture = "open"
-
-        # Previous finger count for number key presses
         self.previous_finger_count = 0
-
-        # Last stable finger count (when hand was fully open)
-        self.stable_finger_count = 0
-
-        # Track if we're in a closing/opening transition
-        self.in_transition = False
-
-        # Current finger count for display
-        self.current_finger_count = 0
-
-        # Time-based tracking for stable finger counts
-        self.last_finger_count_change_time = time.time()
-        self.time_at_current_count = 0.0
-        self.stable_threshold = 0.5  # Time needed to be considered stable (seconds)
-        self.transition_window = 0.3  # Time window to detect quick transitions (seconds)
+        
+        # EMOTE MODE - when enabled, disable click detection
+        self.emote_mode_active = False
+    
+    def set_emote_mode(self, active):
+        """
+        Enable/disable emote mode (disables click detection)
+        
+        Args:
+            active: True to enable emote mode, False to disable
+        """
+        self.emote_mode_active = active
 
     def calculate_distance(self, point1, point2):
         """
@@ -121,6 +116,10 @@ class GestureRecognizer:
         # Determine if hand is open (3+ fingers)
         open_gesture = total_fingers_extended >= 3
         
+
+        # In emote mode, always return "open" to prevent clicks
+        if self.emote_mode_active:
+            return "open"
         # Combine both methods
         # Hand is closed if fingers are not extended
         if not open_gesture:
