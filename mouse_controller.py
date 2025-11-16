@@ -9,16 +9,19 @@ from collections import deque
 
 
 class MouseController:
-    def __init__(self, smoothing_factor=0.3, click_cooldown=0.3, 
-                 screen_margin=50, movement_threshold=2):
+    def __init__(self, smoothing_factor=0.3, click_cooldown=0.3,
+                 screen_margin=50, movement_threshold=2,
+                 tracking_zone_min=0.15, tracking_zone_max=0.85):
         """
         Initialize mouse controller
-        
+
         Args:
             smoothing_factor: Exponential smoothing (0-1, lower = more smooth)
             click_cooldown: Minimum seconds between clicks
             screen_margin: Pixels from screen edge to create dead zone
             movement_threshold: Minimum pixel movement to update cursor
+            tracking_zone_min: Minimum boundary of active tracking zone (0-1)
+            tracking_zone_max: Maximum boundary of active tracking zone (0-1)
         """
         self.smoothing_factor = smoothing_factor
         self.drag_smoothing_factor = 0.7  # More responsive during drag
@@ -26,6 +29,10 @@ class MouseController:
         self.screen_margin = screen_margin
         self.movement_threshold = movement_threshold
         self.drag_movement_threshold = 0  # No threshold during drag
+
+        # Tracking zone boundaries (portion of camera frame to use)
+        self.tracking_zone_min = tracking_zone_min
+        self.tracking_zone_max = tracking_zone_max
         
         # Screen dimensions
         self.screen_width, self.screen_height = pyautogui.size()
@@ -53,24 +60,38 @@ class MouseController:
     def map_to_screen(self, hand_x, hand_y):
         """
         Map normalized hand coordinates (0-1) to screen coordinates
-        
+        Uses a tracking zone to allow reaching screen edges without hand leaving camera
+
         Args:
             hand_x: Normalized x coordinate (0-1)
             hand_y: Normalized y coordinate (0-1)
-            
+
         Returns:
             tuple: (screen_x, screen_y)
         """
+        # Remap hand coordinates from tracking zone to full 0-1 range
+        # If hand is at tracking_zone_min, it maps to 0
+        # If hand is at tracking_zone_max, it maps to 1
+        zone_width = self.tracking_zone_max - self.tracking_zone_min
+
+        # Remap x coordinate
+        remapped_x = (hand_x - self.tracking_zone_min) / zone_width
+        remapped_x = max(0, min(1, remapped_x))  # Clamp to 0-1
+
+        # Remap y coordinate
+        remapped_y = (hand_y - self.tracking_zone_min) / zone_width
+        remapped_y = max(0, min(1, remapped_y))  # Clamp to 0-1
+
         # Map to screen coordinates
-        screen_x = int(hand_x * self.screen_width)
-        screen_y = int(hand_y * self.screen_height)
-        
+        screen_x = int(remapped_x * self.screen_width)
+        screen_y = int(remapped_y * self.screen_height)
+
         # Apply margins (keep cursor away from edges)
-        screen_x = max(self.screen_margin, 
+        screen_x = max(self.screen_margin,
                       min(screen_x, self.screen_width - self.screen_margin))
         screen_y = max(self.screen_margin,
                       min(screen_y, self.screen_height - self.screen_margin))
-        
+
         return screen_x, screen_y
     
     def smooth_position(self, new_x, new_y):
