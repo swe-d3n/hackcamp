@@ -2,6 +2,7 @@
 Configuration File
 Centralized settings for the hand tracking mouse control system
 """
+import numpy as np
 
 
 class Config:
@@ -51,46 +52,26 @@ class Config:
     COLOR_FPS_MEDIUM = (0, 255, 255)  # Yellow (15-25 FPS)
     COLOR_FPS_BAD = (0, 0, 255)  # Red (<15 FPS)
 
+    EMOTE_BUTTON_POS = (1800, 950)  # CHANGE THIS
+    
+    # Individual emote positions in the emote menu
+    # These are examples - calibrate for your setup!
+    EMOTE_POSITIONS = {
+        "laughing": (1500, 700),
+        "crying": (1600, 700),
+        "angry": (1700, 700),
+        "king_thumbs_up": (1800, 700),
+        "thumbs_up": (1500, 800),
+        "chicken": (1600, 800),
+        "goblin_kiss": (1700, 800),
+        "princess_yawn": (1800, 800),
+        "wow": (1500, 900),
+        "thinking": (1600, 900),
+        "screaming": (1700, 900),
+        "king_laugh": (1800, 900),
+        "goblin_laugh": (1500, 1000),
+        "princess_cry": (1600, 1000),
+        "goblin_angry": (1700, 1000),
+    }
 
-# Preset configurations for different use cases
-
-class HighPerformanceConfig(Config):
-    """Optimized for performance - lower quality but faster"""
-    CAMERA_WIDTH = 480
-    CAMERA_HEIGHT = 360
-    GESTURE_SMOOTHING_FRAMES = 3
-    MIN_DETECTION_CONFIDENCE = 0.6
-    MIN_TRACKING_CONFIDENCE = 0.4
-
-
-class HighAccuracyConfig(Config):
-    """Optimized for accuracy - higher quality but slower"""
-    CAMERA_WIDTH = 1280
-    CAMERA_HEIGHT = 720
-    GESTURE_SMOOTHING_FRAMES = 7
-    MIN_DETECTION_CONFIDENCE = 0.8
-    MIN_TRACKING_CONFIDENCE = 0.7
-    CURSOR_SMOOTHING_FACTOR = 0.2
-
-
-class ResponsiveConfig(Config):
-    """Optimized for responsiveness - less smoothing"""
-    CURSOR_SMOOTHING_FACTOR = 0.5
-    GESTURE_SMOOTHING_FRAMES = 3
-    CLICK_COOLDOWN = 0.2
-
-
-class SmoothConfig(Config):
-    """Optimized for smooth cursor movement"""
-    CURSOR_SMOOTHING_FACTOR = 0.2
-    GESTURE_SMOOTHING_FRAMES = 7
-    MOVEMENT_THRESHOLD = 1
-
-
-# Select which configuration to use
-# Change this to switch between presets
-ACTIVE_CONFIG = Config  # Default configuration
-# ACTIVE_CONFIG = HighPerformanceConfig
-# ACTIVE_CONFIG = HighAccuracyConfig
-# ACTIVE_CONFIG = ResponsiveConfig
-# ACTIVE_CONFIG = SmoothConfig
+ACTIVE_CONFIG = Config()
