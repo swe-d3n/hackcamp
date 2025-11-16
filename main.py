@@ -46,7 +46,9 @@ class HandMouseApp:
             smoothing_factor=Config.CURSOR_SMOOTHING_FACTOR,
             click_cooldown=Config.CLICK_COOLDOWN,
             screen_margin=Config.SCREEN_MARGIN,
-            movement_threshold=Config.MOVEMENT_THRESHOLD
+            movement_threshold=Config.MOVEMENT_THRESHOLD,
+            tracking_zone_min=Config.TRACKING_ZONE_MIN,
+            tracking_zone_max=Config.TRACKING_ZONE_MAX
         )
         
         # FPS tracking
@@ -81,6 +83,34 @@ class HandMouseApp:
             hand_detected: Whether a hand was detected
         """
         h, w, _ = frame.shape
+
+        # Draw tracking zone boundaries
+        if Config.SHOW_TRACKING_ZONE:
+            zone_x1 = int(w * Config.TRACKING_ZONE_MIN)
+            zone_y1 = int(h * Config.TRACKING_ZONE_MIN)
+            zone_x2 = int(w * Config.TRACKING_ZONE_MAX)
+            zone_y2 = int(h * Config.TRACKING_ZONE_MAX)
+
+            # Draw tracking zone rectangle
+            cv2.rectangle(frame, (zone_x1, zone_y1), (zone_x2, zone_y2),
+                         (0, 255, 255), 2)  # Yellow border
+
+            # Add corner markers for better visibility
+            marker_size = 20
+            color = (0, 255, 255)
+            thickness = 3
+            # Top-left corner
+            cv2.line(frame, (zone_x1, zone_y1), (zone_x1 + marker_size, zone_y1), color, thickness)
+            cv2.line(frame, (zone_x1, zone_y1), (zone_x1, zone_y1 + marker_size), color, thickness)
+            # Top-right corner
+            cv2.line(frame, (zone_x2, zone_y1), (zone_x2 - marker_size, zone_y1), color, thickness)
+            cv2.line(frame, (zone_x2, zone_y1), (zone_x2, zone_y1 + marker_size), color, thickness)
+            # Bottom-left corner
+            cv2.line(frame, (zone_x1, zone_y2), (zone_x1 + marker_size, zone_y2), color, thickness)
+            cv2.line(frame, (zone_x1, zone_y2), (zone_x1, zone_y2 - marker_size), color, thickness)
+            # Bottom-right corner
+            cv2.line(frame, (zone_x2, zone_y2), (zone_x2 - marker_size, zone_y2), color, thickness)
+            cv2.line(frame, (zone_x2, zone_y2), (zone_x2, zone_y2 - marker_size), color, thickness)
 
         # Semi-transparent overlay for better text visibility
         overlay = frame.copy()

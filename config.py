@@ -23,8 +23,12 @@ class Config:
     # Mouse Control Settings
     CURSOR_SMOOTHING_FACTOR = 0.3  # 0-1, lower = smoother but slower
     CLICK_COOLDOWN = 0.3  # Seconds between clicks
-    SCREEN_MARGIN = 50  # Pixels from edge to prevent cursor going offscreen
+    SCREEN_MARGIN = 0  # Pixels from edge (0 = can reach actual edges)
     MOVEMENT_THRESHOLD = 2  # Minimum pixels to move (reduces jitter)
+    TRACKING_ZONE_MIN = 0.10  # Start of active tracking zone (0-1)
+    TRACKING_ZONE_MAX = 0.90  # End of active tracking zone (0-1)
+    # Smaller zone = more zoom (easier to reach edges)
+    # Larger zone = less zoom (more precision)
     
     # UI Settings
     SHOW_CAMERA_FEED = True
@@ -32,6 +36,7 @@ class Config:
     SHOW_FPS = True
     SHOW_GESTURE_STATUS = True
     SHOW_CURSOR_POSITION = True
+    SHOW_TRACKING_ZONE = True  # Show tracking zone boundaries on camera feed
     
     # Performance Settings
     MAX_FPS = 30  # Cap FPS to reduce CPU usage
