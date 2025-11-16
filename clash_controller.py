@@ -305,6 +305,9 @@ class ClashEmoteApp:
         
         if emote in key_map:
             key = key_map[emote]
+            pyautogui.press("e")
+            time.sleep(0.1)  # Small delay to ensure 'e' is registered
+            print("pressing e")
             print(f"🎮 {emote} emote triggered! Pressing '{key}'")
             pyautogui.press(key)
     
@@ -411,8 +414,8 @@ class ClashEmoteApp:
                             elif current_time - self.last_two_hand_check_time >= self.two_hand_check_interval:
                                 if num_hands >= 2:
                                     self.emote_mode = True
-                                    pyautogui.press('e')
-                                    print("Entering EMOTE MODE - pressed 'E'")
+                                    
+                                    
                                     self.controller.cleanup()
 
                                 # reset the timer either way
@@ -434,6 +437,8 @@ class ClashEmoteApp:
                                 # Return to mouse mode after emote
                                 self.emote_mode = False
                                 print("Returning to MOUSE MODE")
+                                
+                                
                     else:
                         # Lost second hand, return to mouse mode
                         self.emote_mode = False
