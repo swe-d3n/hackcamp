@@ -1,4 +1,4 @@
-# 🎮 Tele-Clash - Play Clash without touching your phone
+# 🎮 Tele-Clash - Play Clash Royale without touching your phone
 
 **Control your computer with the power of your hands — no mouse required.**
 
