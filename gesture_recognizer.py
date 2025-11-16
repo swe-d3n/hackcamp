@@ -1,6 +1,6 @@
 """
-Gesture Recognizer Module
-Recognizes hand gestures (open/closed)
+Gesture Recognizer Module with Drag and Drop Support
+Recognizes hand gestures (open/closed) and gesture transitions
 """
 
 import numpy as np
@@ -24,6 +24,9 @@ class GestureRecognizer:
         
         # Previous gesture state
         self.previous_gesture = "open"
+        
+        # Drag state tracking
+        self.is_dragging = False
         
     def calculate_distance(self, point1, point2):
         """
@@ -92,10 +95,6 @@ class GestureRecognizer:
         
         # Hand is open if at least 3 fingers are extended
         open_gesture = sum(fingers_extended) >= 3
-
-        # For Debugging
-        # print(f"Fingers extended: {fingers_extended}, Count: {sum(fingers_extended)}, Open: {open_gesture}")
-        # print(f"Distance closed: {distance_closed}, Avg dist: {avg_distance:.3f}")
         
         # Combine both methods
         # Hand is closed if fingers are not extended
@@ -140,14 +139,48 @@ class GestureRecognizer:
         self.previous_gesture = smoothed_gesture
         return smoothed_gesture
     
+    def get_gesture_event(self, landmarks):
+        """
+        Get gesture and detect state transitions for drag and drop
+        
+        Args:
+            landmarks: List of landmark dicts
+            
+        Returns:
+            tuple: (gesture, event) where event is one of:
+                   - "grab": transition from open to closed (start drag)
+                   - "release": transition from closed to open (end drag)
+                   - "hold": gesture unchanged
+                   - None: no hand detected
+        """
+        if landmarks is None or len(landmarks) < 21:
+            return None, None
+        
+        # Get smoothed gesture
+        current_gesture = self.get_smoothed_gesture(landmarks)
+        
+        # Detect transition events
+        event = "hold"
+        
+        if self.previous_gesture == "open" and current_gesture == "closed":
+            event = "grab"
+            self.is_dragging = True
+        elif self.previous_gesture == "closed" and current_gesture == "open":
+            event = "release"
+            self.is_dragging = False
+        
+        return current_gesture, event
+    
     def reset(self):
-        """Reset gesture history"""
+        """Reset gesture history and drag state"""
         self.gesture_history.clear()
         self.previous_gesture = "open"
+        self.is_dragging = False
 
 
 if __name__ == "__main__":
-    # Test gesture recognizer
+    # Test gesture recognizer with drag events
+    import cv2
     from camera_handler import CameraHandler
     from hand_detector import HandDetector
     
@@ -157,7 +190,10 @@ if __name__ == "__main__":
     detector = HandDetector()
     recognizer = GestureRecognizer()
     
-    print("Show your hand. Open hand = hover, Closed fist = click")
+    print("Gesture Controls:")
+    print("  Open hand = Move cursor")
+    print("  Close fist = Grab (start drag)")
+    print("  Open hand again = Release (end drag)")
     print("Press 'q' to quit.")
     
     while camera.is_opened():
@@ -169,19 +205,31 @@ if __name__ == "__main__":
         # Detect hands
         frame, hands_data = detector.find_hands(frame, draw=True)
         
-        gesture = "None"
-        
         if hands_data:
             # Get first hand
             landmarks = hands_data[0]['landmarks']
             
-            # Recognize gesture
-            gesture = recognizer.get_smoothed_gesture(landmarks)
+            # Recognize gesture with events
+            gesture, event = recognizer.get_gesture_event(landmarks)
             
-            # Display gesture
-            color = (0, 255, 0) if gesture == "open" else (0, 0, 255)
-            cv2.putText(frame, f"Gesture: {gesture.upper()}", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            # Display gesture and event
+            if gesture:
+                color = (0, 255, 0) if gesture == "open" else (0, 0, 255)
+                cv2.putText(frame, f"Gesture: {gesture.upper()}", (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                
+                # Display event
+                if event == "grab":
+                    cv2.putText(frame, "EVENT: GRAB!", (10, 70),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                elif event == "release":
+                    cv2.putText(frame, "EVENT: RELEASE!", (10, 70),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+                
+                # Display drag state
+                if recognizer.is_dragging:
+                    cv2.putText(frame, "DRAGGING", (10, 110),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
         
         cv2.imshow("Gesture Recognition Test", frame)
         
