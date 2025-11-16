@@ -1,0 +1,96 @@
+"""
+Configuration File
+Centralized settings for the hand tracking mouse control system
+"""
+
+
+class Config:
+    # Camera Settings
+    CAMERA_INDEX = 0  # Default camera (usually 0)
+    CAMERA_WIDTH = 640
+    CAMERA_HEIGHT = 480
+    CAMERA_FPS = 30
+    
+    # Hand Detection Settings
+    MAX_NUM_HANDS = 1
+    MIN_DETECTION_CONFIDENCE = 0.7
+    MIN_TRACKING_CONFIDENCE = 0.5
+    
+    # Gesture Recognition Settings
+    GESTURE_SMOOTHING_FRAMES = 5  # Number of frames for smoothing
+    CLOSED_HAND_THRESHOLD = 0.08  # Distance threshold for closed hand
+    
+    # Mouse Control Settings
+    CURSOR_SMOOTHING_FACTOR = 0.3  # 0-1, lower = smoother but slower
+    CLICK_COOLDOWN = 0.3  # Seconds between clicks
+    SCREEN_MARGIN = 50  # Pixels from edge to prevent cursor going offscreen
+    MOVEMENT_THRESHOLD = 2  # Minimum pixels to move (reduces jitter)
+    
+    # UI Settings
+    SHOW_CAMERA_FEED = True
+    DRAW_HAND_LANDMARKS = True
+    SHOW_FPS = True
+    SHOW_GESTURE_STATUS = True
+    SHOW_CURSOR_POSITION = True
+    
+    # Performance Settings
+    MAX_FPS = 30  # Cap FPS to reduce CPU usage
+    
+    # Control Point Settings
+    # Which landmark to use for cursor control
+    # 8 = index finger tip (default)
+    # 4 = thumb tip
+    # 12 = middle finger tip
+    CURSOR_CONTROL_LANDMARK = 8  # Index finger tip
+    
+    # Color Settings (BGR format)
+    COLOR_OPEN_HAND = (0, 255, 0)  # Green
+    COLOR_CLOSED_HAND = (0, 0, 255)  # Red
+    COLOR_TEXT = (255, 255, 255)  # White
+    COLOR_FPS_GOOD = (0, 255, 0)  # Green (>25 FPS)
+    COLOR_FPS_MEDIUM = (0, 255, 255)  # Yellow (15-25 FPS)
+    COLOR_FPS_BAD = (0, 0, 255)  # Red (<15 FPS)
+
+
+# Preset configurations for different use cases
+
+class HighPerformanceConfig(Config):
+    """Optimized for performance - lower quality but faster"""
+    CAMERA_WIDTH = 480
+    CAMERA_HEIGHT = 360
+    GESTURE_SMOOTHING_FRAMES = 3
+    MIN_DETECTION_CONFIDENCE = 0.6
+    MIN_TRACKING_CONFIDENCE = 0.4
+
+
+class HighAccuracyConfig(Config):
+    """Optimized for accuracy - higher quality but slower"""
+    CAMERA_WIDTH = 1280
+    CAMERA_HEIGHT = 720
+    GESTURE_SMOOTHING_FRAMES = 7
+    MIN_DETECTION_CONFIDENCE = 0.8
+    MIN_TRACKING_CONFIDENCE = 0.7
+    CURSOR_SMOOTHING_FACTOR = 0.2
+
+
+class ResponsiveConfig(Config):
+    """Optimized for responsiveness - less smoothing"""
+    CURSOR_SMOOTHING_FACTOR = 0.5
+    GESTURE_SMOOTHING_FRAMES = 3
+    CLICK_COOLDOWN = 0.2
+
+
+class SmoothConfig(Config):
+    """Optimized for smooth cursor movement"""
+    CURSOR_SMOOTHING_FACTOR = 0.2
+    GESTURE_SMOOTHING_FRAMES = 7
+    MOVEMENT_THRESHOLD = 1
+
+
+# Select which configuration to use
+# Change this to switch between presets
+ACTIVE_CONFIG = Config  # Default configuration
+# ACTIVE_CONFIG = HighPerformanceConfig
+# ACTIVE_CONFIG = HighAccuracyConfig
+# ACTIVE_CONFIG = ResponsiveConfig
+# ACTIVE_CONFIG = SmoothConfig
