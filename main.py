@@ -71,7 +71,7 @@ class HandMouseApp:
             self.frame_count = 0
             self.fps_start_time = time.time()
     
-    def draw_ui(self, frame, gesture, hand_detected):
+    def draw_ui(self, frame, gesture, hand_detected, finger_count=0):
         """
         Draw UI overlay on frame
 
@@ -79,6 +79,7 @@ class HandMouseApp:
             frame: Camera frame
             gesture: Current gesture ("open", "closed", or None)
             hand_detected: Whether a hand was detected
+            finger_count: Number of fingers detected
         """
         h, w, _ = frame.shape
 
@@ -109,6 +110,13 @@ class HandMouseApp:
             cv2.putText(frame, "Hand: NOT DETECTED", (10, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         y_offset += 35
+
+        # Finger count display
+        if hand_detected:
+            finger_color = (255, 200, 0)  # Cyan color for finger count
+            cv2.putText(frame, f"Fingers: {finger_count}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, finger_color, 2)
+            y_offset += 35
 
         # Gesture status
         if Config.SHOW_GESTURE_STATUS and gesture:
@@ -164,6 +172,7 @@ class HandMouseApp:
         
         gesture = None
         hand_detected = len(hands_data) > 0
+        finger_count = 0
 
         if hand_detected:
             # Get first hand
@@ -171,12 +180,15 @@ class HandMouseApp:
 
             # Calculate palm center (average of palm base landmarks)
             # Landmarks: 0=wrist, 1=thumb_cmc, 5=index_mcp, 9=middle_mcp, 13=ring_mcp, 17=pinky_mcp
-            palm_landmarks = [0, 1, 5, 9, 13, 17]
+            palm_landmarks = [0]
             hand_x = sum(landmarks[i]['x'] for i in palm_landmarks) / len(palm_landmarks)
             hand_y = sum(landmarks[i]['y'] for i in palm_landmarks) / len(palm_landmarks)
 
             # Recognize gesture
             gesture = self.recognizer.get_smoothed_gesture(landmarks)
+
+            # Get finger count from recognizer
+            finger_count = self.recognizer.current_finger_count
 
             # Update mouse control
             try:
@@ -190,7 +202,7 @@ class HandMouseApp:
 
         # Draw UI
         if Config.SHOW_CAMERA_FEED:
-            self.draw_ui(frame, gesture, hand_detected)
+            self.draw_ui(frame, gesture, hand_detected, finger_count)
             cv2.imshow("Hand Mouse Control", frame)
         
         return True
