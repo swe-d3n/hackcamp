@@ -1,6 +1,6 @@
 """
 Mouse Controller Module
-Controls mouse cursor movement and clicking
+Controls mouse cursor movement, clicking, and dragging
 """
 
 import pyautogui
@@ -21,9 +21,11 @@ class MouseController:
             movement_threshold: Minimum pixel movement to update cursor
         """
         self.smoothing_factor = smoothing_factor
+        self.drag_smoothing_factor = 0.7  # More responsive during drag
         self.click_cooldown = click_cooldown
         self.screen_margin = screen_margin
         self.movement_threshold = movement_threshold
+        self.drag_movement_threshold = 0  # No threshold during drag
         
         # Screen dimensions
         self.screen_width, self.screen_height = pyautogui.size()
@@ -37,6 +39,12 @@ class MouseController:
         self.last_click_time = 0
         self.previous_gesture = "open"
         self.is_clicking = False
+        
+        # Drag state tracking
+        self.is_dragging = False
+        self.drag_start_position = None
+        self.drag_start_time = 0
+        self.min_drag_time = 0.15  # Minimum time to hold before drag (seconds)
         
         # Safety settings
         pyautogui.FAILSAFE = True  # Move to corner to stop
@@ -76,11 +84,14 @@ class MouseController:
         Returns:
             tuple: (smoothed_x, smoothed_y)
         """
+        # Use more responsive smoothing during drag
+        factor = self.drag_smoothing_factor if self.is_dragging else self.smoothing_factor
+        
         # Exponential moving average
-        self.smooth_x = (self.smoothing_factor * new_x + 
-                        (1 - self.smoothing_factor) * self.smooth_x)
-        self.smooth_y = (self.smoothing_factor * new_y + 
-                        (1 - self.smoothing_factor) * self.smooth_y)
+        self.smooth_x = (factor * new_x + 
+                        (1 - factor) * self.smooth_x)
+        self.smooth_y = (factor * new_y + 
+                        (1 - factor) * self.smooth_y)
         
         return int(self.smooth_x), int(self.smooth_y)
     
@@ -101,58 +112,98 @@ class MouseController:
         # Get current cursor position
         current_x, current_y = pyautogui.position()
         
+        # Use different thresholds for dragging vs normal movement
+        threshold = self.drag_movement_threshold if self.is_dragging else self.movement_threshold
+        
         # Only move if movement is significant (reduces jitter)
         distance = ((smooth_x - current_x)**2 + (smooth_y - current_y)**2)**0.5
         
-        if distance > self.movement_threshold:
+        if distance > threshold:
             try:
+                # moveTo works during drag - cursor moves while button held
                 pyautogui.moveTo(smooth_x, smooth_y, _pause=False)
             except pyautogui.FailSafeException:
                 print("FailSafe triggered - mouse moved to corner")
+                # Clean up if failsafe triggers during drag
+                if self.is_dragging:
+                    pyautogui.mouseUp()
+                    self.is_dragging = False
                 raise
     
     def handle_click(self, gesture):
         """
-        Handle click based on gesture
-
+        Handle click and drag based on gesture
+        
         Args:
             gesture: Current gesture ("open" or "closed")
         """
         current_time = time.time()
-
-        # Detect transition from open to closed (click trigger)
+        
+        # Transition from open to closed - start drag or prepare for click
         if gesture == "closed" and self.previous_gesture == "open":
-            # Check if enough time has passed since last click
+            # Check if enough time has passed since last action
             if current_time - self.last_click_time > self.click_cooldown:
+                if not self.is_dragging:
+                    # Start dragging - hold mouse button down
+                    try:
+                        pyautogui.mouseDown()
+                        self.is_dragging = True
+                        self.drag_start_position = pyautogui.position()
+                        self.drag_start_time = current_time
+                        self.is_clicking = True
+                        print("Drag started!")
+                    except pyautogui.FailSafeException:
+                        print("FailSafe triggered during drag start")
+                        raise
+        
+        # Transition from closed to open - end drag or register click
+        elif gesture == "open" and self.previous_gesture == "closed":
+            if self.is_dragging:
                 try:
-                    pyautogui.click()
+                    # Calculate drag distance to determine if it was a click or drag
+                    current_pos = pyautogui.position()
+                    drag_distance = ((current_pos[0] - self.drag_start_position[0])**2 + 
+                                   (current_pos[1] - self.drag_start_position[1])**2)**0.5
+                    drag_duration = current_time - self.drag_start_time
+                    
+                    # Release mouse button
+                    pyautogui.mouseUp()
+                    self.is_dragging = False
                     self.last_click_time = current_time
-                    self.is_clicking = True
-                    print("Click!")
+                    
+                    # Determine if it was a click or drag
+                    if drag_distance < 10 and drag_duration < self.min_drag_time:
+                        print("Click!")
+                    else:
+                        print(f"Drag ended (moved {drag_distance:.0f}px)")
+                    
                 except pyautogui.FailSafeException:
-                    print("FailSafe triggered during click")
+                    print("FailSafe triggered during drag end")
+                    if self.is_dragging:
+                        pyautogui.mouseUp()
+                        self.is_dragging = False
                     raise
-
+        
         # Update clicking state
         if gesture == "open":
             self.is_clicking = False
-
+        
         # Update previous gesture
         self.previous_gesture = gesture
-
+    
     def update(self, hand_x, hand_y, gesture):
         """
-        Update cursor position and handle clicks
-
+        Update cursor position and handle clicks/drags
+        
         Args:
             hand_x: Normalized hand x position (0-1)
             hand_y: Normalized hand y position (0-1)
             gesture: Current gesture ("open" or "closed")
         """
-        # Move cursor
+        # Move cursor (works during drag too)
         self.move_cursor(hand_x, hand_y)
-
-        # Handle clicks
+        
+        # Handle clicks and drags
         self.handle_click(gesture)
     
     def get_cursor_info(self):
@@ -168,13 +219,26 @@ class MouseController:
             'x': current_x,
             'y': current_y,
             'is_clicking': self.is_clicking,
+            'is_dragging': self.is_dragging,
             'screen_width': self.screen_width,
             'screen_height': self.screen_height
         }
+    
+    def cleanup(self):
+        """Release mouse button if still pressed"""
+        if self.is_dragging:
+            try:
+                pyautogui.mouseUp()
+                print("Cleanup: Released mouse button")
+            except:
+                pass
+            self.is_dragging = False
+            self.is_clicking = False
 
 
 if __name__ == "__main__":
-    # Test mouse controller
+    # Test mouse controller with drag feature
+    import cv2
     from camera_handler import CameraHandler
     from hand_detector import HandDetector
     from gesture_recognizer import GestureRecognizer
@@ -186,54 +250,73 @@ if __name__ == "__main__":
     recognizer = GestureRecognizer()
     controller = MouseController()
     
-    print("Hand Mouse Control Test")
+    print("Hand Mouse Control Test with Drag")
     print("Open hand = move cursor")
-    print("Closed fist = click")
+    print("Close fist and hold = drag")
+    print("Close and release quickly = click")
     print("Press 'q' to quit")
     print("Move mouse to screen corner to emergency stop")
     
-    while camera.is_opened():
-        ret, frame = camera.read_frame()
-        
-        if not ret:
-            break
-        
-        # Detect hands
-        frame, hands_data = detector.find_hands(frame, draw=True)
-        
-        if hands_data:
-            # Get first hand
-            landmarks = hands_data[0]['landmarks']
+    try:
+        while camera.is_opened():
+            ret, frame = camera.read_frame()
             
-            # Get index finger tip position (use as cursor control point)
-            index_tip = landmarks[8]  # Index finger tip
-            hand_x = index_tip['x']
-            hand_y = index_tip['y']
-            
-            # Recognize gesture
-            gesture = recognizer.get_smoothed_gesture(landmarks)
-            
-            # Update mouse
-            try:
-                controller.update(hand_x, hand_y, gesture)
-            except pyautogui.FailSafeException:
-                print("Emergency stop activated!")
+            if not ret:
                 break
             
-            # Display info
-            color = (0, 255, 0) if gesture == "open" else (0, 0, 255)
-            cv2.putText(frame, f"Gesture: {gesture.upper()}", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            # Detect hands
+            frame, hands_data = detector.find_hands(frame, draw=True)
             
-            cursor_info = controller.get_cursor_info()
-            cv2.putText(frame, f"Cursor: ({cursor_info['x']}, {cursor_info['y']})",
-                       (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        cv2.imshow("Mouse Control Test", frame)
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            if hands_data:
+                # Get first hand
+                landmarks = hands_data[0]['landmarks']
+                
+                # Get index finger tip position (use as cursor control point)
+                index_tip = landmarks[8]  # Index finger tip
+                hand_x = index_tip['x']
+                hand_y = index_tip['y']
+                
+                # Recognize gesture
+                gesture = recognizer.get_smoothed_gesture(landmarks)
+                
+                # Update mouse
+                try:
+                    controller.update(hand_x, hand_y, gesture)
+                except pyautogui.FailSafeException:
+                    print("Emergency stop activated!")
+                    break
+                
+                # Display info
+                cursor_info = controller.get_cursor_info()
+                
+                # Color based on state
+                if cursor_info['is_dragging']:
+                    color = (255, 0, 255)  # Magenta for dragging
+                    status = "DRAGGING"
+                elif gesture == "closed":
+                    color = (0, 0, 255)  # Red for closed
+                    status = "CLOSED"
+                else:
+                    color = (0, 255, 0)  # Green for open
+                    status = "HOVER"
+                
+                cv2.putText(frame, f"Gesture: {status}", (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                
+                cv2.putText(frame, f"Cursor: ({cursor_info['x']}, {cursor_info['y']})",
+                           (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                
+                if cursor_info['is_dragging']:
+                    cv2.putText(frame, "DRAG ACTIVE", (10, 110),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+            
+            cv2.imshow("Mouse Control Test", frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
     
-    detector.release()
-    camera.release()
-    cv2.destroyAllWindows()
+    finally:
+        controller.cleanup()
+        detector.release()
+        camera.release()
+        cv2.destroyAllWindows()
